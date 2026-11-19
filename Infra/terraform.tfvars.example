@@ -1,14 +1,15 @@
 # Copy to terraform.tfvars (gitignored) and fill in.
 # The state bucket is passed to `terraform init` -- see Doc/deployment.md.
 
-aws_region         = "us-east-1"
-aws_profile        = "" # leave blank to use the default credential chain
-environment        = "dev"
-project_name       = "secure-secrets"
-ses_sender_email   = "secrets@yourdomain.com"
+aws_region              = "us-east-1"
+aws_profile             = "" # leave blank to use AWS_PROFILE
+environment             = "dev"
+project_name            = "secure-secrets"
+ses_sender_email        = "secrets@yourdomain.com"
+budget_limit_usd        = 1 # monthly USD; emails you at 80%
 budget_alert_emails     = ["you@yourdomain.com"]
 monitoring_alert_emails = ["you@yourdomain.com"]
-github_repository  = "your-org/your-repo"
+github_repository       = "your-org/your-repo"
 
 # false if this AWS account already has a GitHub Actions OIDC provider from another
 # project (one per account per URL — see modules/github-oidc).

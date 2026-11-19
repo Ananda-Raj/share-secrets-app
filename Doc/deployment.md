@@ -10,7 +10,7 @@ To understand how the pieces fit together first, read [design.md](design.md).
   DynamoDB, Cognito, SES, S3, CloudFront, CloudWatch, SNS and Budgets resources.
 - [AWS CLI v2](https://docs.aws.amazon.com/cli/latest/userguide/getting-started-install.html)
 - [Terraform](https://developer.hashicorp.com/terraform/install) 1.10 or later
-- [Node.js](https://nodejs.org/) 20 and npm
+- [Node.js](https://nodejs.org/) 24 and npm (20.19 or later also works)
 - An email address you can receive mail at. It becomes the sender address for the app's
   emails.
 - Optional: an OIDC identity provider (Entra ID, Okta, Google Workspace, Auth0,
@@ -28,7 +28,18 @@ aws sts get-caller-identity
 ```
 
 Terraform and the AWS CLI both read `AWS_PROFILE`, so keep it set in the terminal you
-use for the rest of this guide. Leave `aws_profile` blank in `terraform.tfvars`.
+use for the rest of this guide. Leave `aws_profile` blank in `terraform.tfvars`. A new
+terminal forgets it, and `STATE_BUCKET` from step 2, so set both again there.
+
+**Several profiles on one machine?** Skip the export and name the profile in this
+project only:
+
+- add `--profile <your-profile>` to each `aws` command
+- set `aws_profile = "<your-profile>"` in `terraform.tfvars` (step 4)
+- add `-backend-config="profile=<your-profile>"` to `terraform init` (step 6)
+
+Init saves the backend profile in `Infra/.terraform`, so later plans and applies reuse
+it. Check that `env | grep '^AWS_'` prints nothing, so no other credentials get mixed in.
 
 ## 2. Create a bucket for Terraform state
 
@@ -94,10 +105,11 @@ your machine. Edit it:
 | Setting | What to put |
 |---|---|
 | `aws_region` | Region for the whole stack. Default `us-east-1`. |
-| `aws_profile` | Leave blank and use `AWS_PROFILE`. |
+| `aws_profile` | Leave blank to use `AWS_PROFILE`, or name a profile (step 1). |
 | `environment` | For example `dev` or `prod`. It's part of every resource name. |
 | `project_name` | Prefix for every resource name. Default `secure-secrets`. |
 | `ses_sender_email` | The From address for the app's emails. You must be able to receive mail there. |
+| `budget_limit_usd` | Monthly spend, in USD, that you expect. You get an email at 80% of it. Default `5`; `1` suits a test deployment. |
 | `budget_alert_emails` | Who gets the monthly spend alert. |
 | `monitoring_alert_emails` | Who gets Lambda error and email bounce alerts. |
 | `github_repository` | Your `owner/repo`, only needed for GitHub Actions deploys (step 11). |
@@ -116,6 +128,13 @@ aws iam list-open-id-connect-providers
 
 If the output includes `token.actions.githubusercontent.com`, set
 `create_github_oidc_provider = false`.
+
+**Why set a budget?** Everything in this stack is pay-per-use, so a quiet deployment
+costs close to nothing (see [Cost](../README.md#cost)). The budget is your early warning
+if that changes, for example from a retry loop, a flood of requests or a jump in email
+volume. It only sends an email and never stops or deletes anything. With `1`, any real
+spend reaches your inbox. AWS updates billing data a few times a day, so the alert can
+lag by some hours.
 
 ## 5. Build the backend
 
@@ -170,6 +189,12 @@ usually replies within a day. To check your status:
 aws sesv2 get-account --query ProductionAccessEnabled
 ```
 
+**Budget tag.** The budget counts only resources tagged `Project = <project_name>`, and
+AWS ignores a tag for billing until you activate it. The tag shows up in billing up to
+a day after the apply. Then open **Billing and Cost Management → Cost allocation tags**,
+select `Project` and choose **Activate**. Until you do, the budget reads $0 and can't
+alert you.
+
 ## 8. Build and upload the frontend
 
 The frontend needs four values from Terraform at build time:
@@ -205,15 +230,18 @@ Open that URL and sign in.
 - **Option B:** sign in with your identity provider.
 
 You're the first person to sign in, so you become admin automatically and the
-**Admin** link appears.
+**Admin** link appears. Sign in straight after the deploy, before anyone else can.
+
+If you don't want strangers signing up, turn self-sign-up off in **Admin → Auth
+settings** once your account exists, and add people from **Admin → Users**.
 
 Then make it yours:
 
-- **Admin → Branding:** your organization's name, logo, accent color, support email and
-  footer note.
 - **Admin → Sharing rules:** who can send and receive, and for how long links stay
   available. If self-sign-up is open (option A), set **allowed sender domains** so that
   only your organization can send.
+- **Admin → Customize:** a theme, plus your organization's name, logo, support email
+  and footer note.
 - **Admin → Activity:** tick **Email admins a monthly summary** to get one on the 1st of
   each month. **Send me a preview** shows you what it looks like straight away.
 
@@ -234,7 +262,10 @@ want to share it in chat as well. Copy it then, because it can't be shown again.
 ## 11. Optional: deploy from GitHub Actions
 
 The workflows only push application code to resources Terraform already created. They
-authenticate with GitHub's OIDC, so no AWS keys are stored in GitHub.
+never run Terraform. When an update changes infrastructure (a new API route, a
+permission, the Lambda runtime), run `terraform apply` from your machine first; the
+release notes in [CHANGELOG.md](../CHANGELOG.md) say when. They authenticate with GitHub's
+OIDC, so no AWS keys are stored in GitHub.
 
 1. Set `github_repository = "<owner>/<repo>"` in `terraform.tfvars` and apply again.
    The deploy role trusts only that exact repository.
@@ -255,12 +286,21 @@ authenticate with GitHub's OIDC, so no AWS keys are stored in GitHub.
 3. Go to **Actions → Deploy Backend** (or **Deploy Frontend**) and choose **Run
    workflow**.
 
+Deploys are manual on purpose: nothing deploys on a push, so a public repo can't
+deploy to your account by itself, and only people with write access can run them. The
+**environment** input names a GitHub environment. To require an approval before every
+deploy, create that environment under **Settings → Environments** and add required
+reviewers. Repository variables work for one deployment; for several, set the variables
+on each environment instead.
+
 To make the pull request checks binding, add a branch protection rule on `main`
 (**Settings → Branches**) that requires **PR Checks** and
 **Guard Infra / block-infra-changes** to pass.
 
-The **Release** workflow tags `main` with the next version and creates a GitHub
-release.
+The **Release** workflow tags `main` and creates a GitHub release. Give it an exact
+version (for example `2.0.0`) or leave that empty to bump the last one. If
+[CHANGELOG.md](../CHANGELOG.md) has a section for that version, it becomes the release
+notes.
 
 ## 12. Optional: use your own domain
 
@@ -279,18 +319,13 @@ address.
 
 ## Day-to-day operations
 
-**Make someone else admin.** This is deliberately a direct database write, not a
-button in the app (see [design.md](design.md#sign-in-and-roles)). Use their sign-in
-email in lowercase:
+**Make someone else admin.** Go to **Admin → Users** and choose **Make admin**, or
+**Remove admin** to take it back. It needs a sign-in within the last 10 minutes, and every
+admin gets an email about the change (see [design.md](design.md#sign-in-and-roles)).
 
-```bash
-aws dynamodb put-item \
-  --table-name "$(terraform -chdir=Infra output -raw roles_table_name)" \
-  --item '{"email": {"S": "person@example.com"}, "role": {"S": "admin"}}'
-```
-
-To remove admin, run `aws dynamodb delete-item` with
-`--key '{"email": {"S": "person@example.com"}}'`.
+**Clear test history.** Go to **Admin → Activity → Reset**, pick a date range and/or a
+sender, and run the two commands it shows: the first lists what matches, the second
+deletes it. The app itself can't delete history, which is deliberate.
 
 **Deploy a backend change.** Run `npm run build` in `App-code/backend`, then
 `terraform plan` and `terraform apply` in `Infra`. Alternatively, use the Deploy Backend
@@ -315,14 +350,18 @@ Then delete the state bucket. It's versioned, so the simplest way is to choose
 
 | Symptom | Likely cause |
 |---|---|
+| `terraform init` fails with "No valid credential sources found" | No profile reached Terraform: set `AWS_PROFILE` or pass `-backend-config="profile=..."` (step 1). If it's an SSO profile, the session may have expired (`aws sso login`). |
+| `terraform init` fails with "Backend configuration changed" | An old `Infra/.terraform` folder remembers a different state bucket. Run init again with `-reconfigure`. `-migrate-state` is only for moving existing state to the new bucket. |
 | Apply fails with `EntityAlreadyExists` on the GitHub OIDC provider | Set `create_github_oidc_provider = false` (step 4). |
 | Apply fails with "No way to log in" | Set `allow_self_signup = true` or fill in the `oidc_*` settings. |
 | Apply fails because the Lambda source or zip is missing | Build the backend first (step 5). |
 | No email arrives | The SES sender isn't verified, or the recipient isn't verified while you're in the sandbox (step 7). Check spam, then the Lambda's CloudWatch log group `/aws/lambda/<project>-lambda-<env>`. |
+| Sending says "Couldn't email …", or History shows **Not sent** | SES refused the address: in the sandbox, verify the recipient first (step 7). Nothing was shared: the secret is deleted and the History row stays as a record. The log shows `secret.email.error` with the reason. |
 | The identity provider reports a redirect URI mismatch | Compare `terraform output -raw oidc_redirect_uri` with what's registered at the provider. |
 | "Failed to fetch" after sign-in | The frontend was built with stale values. Rebuild with the current outputs (step 8). |
 | Sign-in jumps straight to SSO when you want the sign-up form | `VITE_COGNITO_IDP_NAME` is set and self-sign-up is off. Turn sign-up on from the Admin page, or rebuild without the variable. |
 | A sender sees "Sending isn't available" | Their email domain isn't in **Admin → Sharing rules → Allowed sender domains**. |
 | The "opened" notification doesn't arrive | While SES is in the sandbox, the sender's address must be verified too (step 7). |
 | The monthly summary or its preview doesn't arrive | While SES is in the sandbox, each admin's address must be verified (step 7). The schedule runs at 08:00 UTC on the 1st. The Lambda's log shows `summary.sent` or, if it's turned off, `summary.skipped`. |
+| The budget always shows $0 | The `Project` cost allocation tag isn't active yet (step 7). |
 | SSO configured from the Admin page stops working after an apply | Terraform and the Admin page are both managing the provider. Use one or the other. |

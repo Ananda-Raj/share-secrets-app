@@ -85,6 +85,7 @@ export interface HistoryItem {
   claimedAt: number | null;
   confirmedAt: number | null;
   revokedAt: number | null;
+  failedAt?: number | null; // the email couldn't be sent
 }
 
 export function getMyHistory() {
@@ -111,7 +112,9 @@ function rangeQuery(fromEpoch?: number, toEpoch?: number): string {
 }
 
 export function getAdminAudit(fromEpoch?: number, toEpoch?: number) {
-  return authenticatedRequest<{ items: AdminAuditItem[] }>(`/admin/audit${rangeQuery(fromEpoch, toEpoch)}`);
+  return authenticatedRequest<{ items: AdminAuditItem[]; auditTableName?: string; region?: string }>(
+    `/admin/audit${rangeQuery(fromEpoch, toEpoch)}`
+  );
 }
 
 export interface SenderCount {
@@ -194,22 +197,30 @@ export interface CognitoUserSummary {
 }
 
 export function listAdminUsers() {
-  return authenticatedRequest<{ users: CognitoUserSummary[]; yourEmail: string; rolesTableName: string }>(
-    "/admin/users"
-  );
+  return authenticatedRequest<{ users: CognitoUserSummary[]; yourEmail: string }>("/admin/users");
 }
 
-export function removeAdminUser(username: string, email: string) {
+export function removeAdminUser(username: string) {
   return authenticatedRequest<{ ok: boolean }>("/admin/users/remove", {
     method: "POST",
-    body: JSON.stringify({ username, email }),
+    body: JSON.stringify({ username }),
   });
 }
+
+/** Needs a sign-in in the last 10 minutes; otherwise fails with code "reauth_required". */
+export function setUserRole(username: string, role: Role) {
+  return authenticatedRequest<{ ok: boolean }>("/admin/users/role", {
+    method: "POST",
+    body: JSON.stringify({ username, role }),
+  });
+}
+
+export type Theme = "obsidian" | "midnight" | "racing" | "heritage";
 
 export interface Branding {
   appName: string;
   logoDataUrl: string;
-  accentColor: string;
+  theme: Theme;
   supportEmail: string;
   footerText: string;
 }

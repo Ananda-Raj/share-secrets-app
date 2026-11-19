@@ -25,7 +25,6 @@ module "backend_api" {
 
   frontend_origin  = module.frontend_hosting.frontend_url
   ses_sender_email = var.ses_sender_email
-  ses_identity_arn = module.email.sender_email_identity_arn
 
   grace_seconds    = var.grace_period_seconds
   otp_ttl_seconds  = var.otp_ttl_seconds

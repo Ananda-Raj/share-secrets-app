@@ -25,17 +25,39 @@ browsers never send to a server. It runs on serverless AWS for about $0–3 a mo
   Auth0, Keycloak), open self-sign-up and admin-created local accounts can all run side
   by side. Optional TOTP MFA.
 - **History and revoke.** Senders see what they sent and whether it was opened, but
-  never the secret itself. They can revoke anything that hasn't been opened yet.
+  never the secret itself. They can revoke anything that hasn't been opened yet. If an
+  email can't be sent, the secret is deleted at once and History shows **Not sent**.
 - **Admin page.** Activity log with CSV export, top senders, an optional monthly summary
   email, sign-in settings and user management. The first person to sign in becomes the
-  admin.
-- **Your branding.** Admins set the name, logo, accent color, support email and a footer
-  note. Receivers and emails see it too.
+  admin. Admins can make others admin, which needs a fresh sign-in and emails every
+  admin. History can't be deleted from the app; **Reset** shows the AWS CLI commands
+  instead.
+- **Your branding.** Admins pick one of four themes and set the name, logo, support email
+  and a footer note. Receivers and emails see it too.
 - **Sharing rules.** Limit who can send and who can receive by email domain, cap how long
   links stay available, or turn off attachments. The server enforces them.
 - **Open notifications.** Senders can ask to be emailed when their secret is opened.
 - **Infrastructure as code.** One Terraform stack. GitHub Actions deploys with OIDC, so
   no AWS keys are stored in the repo.
+
+## Screenshots
+
+| Share a secret | Sent, with a link to copy |
+|---|---|
+| ![The form for sharing a secret](Doc/screenshots/share.png) | ![The sent page with the link to copy](Doc/screenshots/sent.png) |
+| **The receiver enters the emailed code** | **Admin: everyone's activity** |
+| ![The receiver's code entry page](Doc/screenshots/unlock.png) | ![The admin activity tab](Doc/screenshots/admin-activity.png) |
+
+<details>
+<summary>More screenshots: history, themes, users, sharing rules and sign-in settings</summary>
+
+![A sender's history](Doc/screenshots/history.png)
+![Choosing one of the four themes](Doc/screenshots/admin-customize.png)
+![Users, local accounts and admin roles](Doc/screenshots/admin-users.png)
+![Sharing rules](Doc/screenshots/admin-sharing-rules.png)
+![Sign-in settings](Doc/screenshots/admin-auth.png)
+
+</details>
 
 ## How it works
 
@@ -81,7 +103,7 @@ The full security model, including its one deliberate trade-off, is in
 
 ## Deploy it
 
-You need an AWS account, Terraform 1.10 or later, Node.js 20 and the AWS CLI. In short:
+You need an AWS account, Terraform 1.10 or later, Node.js 24 (20.19 or later also works) and the AWS CLI. In short:
 
 ```bash
 cd App-code/backend && npm ci && npm run build && cd ../../Infra
@@ -95,11 +117,18 @@ terraform apply
 email setup, single sign-on, the first admin, GitHub Actions, a custom domain and
 teardown.
 
+**GitHub Actions.** After the first `terraform apply`, the Deploy Backend and Deploy
+Frontend workflows push new code with one click, signing in to AWS with OIDC, so no AWS
+keys are stored in GitHub. They need one secret and eight variables, listed in
+[step 11](Doc/deployment.md#11-optional-deploy-from-github-actions). They never run
+Terraform, so apply infrastructure changes yourself first;
+[CHANGELOG.md](CHANGELOG.md) says when a release needs that.
+
 ## Repo layout
 
 ```
 App-code/frontend/   Vite + TypeScript single-page app, no UI framework, no runtime deps
-App-code/backend/    Node.js 20 + TypeScript Lambda, one function for every route
+App-code/backend/    Node.js 24 + TypeScript Lambda, one function for every route
 Infra/               Terraform for the whole stack, run locally, never from CI
 .github/workflows/   PR checks, manual deploys, release tagging
 Doc/                 Design and deployment guides
@@ -111,7 +140,7 @@ At low to moderate volume, most of the stack stays inside the AWS free tier. S3 
 CloudFront cost cents. Lambda, API Gateway and DynamoDB (on-demand) are usually free.
 SES costs $0.10 per 1,000 emails, and Cognito's free tier covers a small team. Expect
 about **$0–3 a month**. A budget alarm emails you when spend crosses 80% of a monthly
-limit you set (default $5).
+limit you set with `budget_limit_usd` (default $5).
 
 ## Security
 

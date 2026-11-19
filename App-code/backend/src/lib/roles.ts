@@ -33,6 +33,16 @@ export async function listAdminEmails(): Promise<Set<string>> {
   return new Set((res.Items ?? []).map((item) => (item.email as string).toLowerCase()));
 }
 
+/** Promote or demote. Demoting writes role "user" rather than deleting: this Lambda can't delete here. */
+export async function setRole(email: string, role: Role, changedBy: string): Promise<void> {
+  await docClient.send(
+    new PutCommand({
+      TableName: config.rolesTableName,
+      Item: { email, role, changedBy, changedAt: Math.floor(Date.now() / 1000) },
+    })
+  );
+}
+
 const BOOTSTRAP_SENTINEL = "__bootstrap__";
 
 /**

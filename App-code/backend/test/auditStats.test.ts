@@ -25,6 +25,11 @@ test("aggregateTopSenders counts and sorts descending", () => {
   ]);
 });
 
+test("aggregateTopSenders skips shares whose email was never sent", () => {
+  const records = [record("a@x.com"), { ...record("b@x.com"), failedAt: 1 }];
+  assert.deepEqual(aggregateTopSenders(records), [{ senderEmail: "a@x.com", count: 1 }]);
+});
+
 test("aggregateTopSenders returns an empty array for no records", () => {
   assert.deepEqual(aggregateTopSenders([]), []);
 });

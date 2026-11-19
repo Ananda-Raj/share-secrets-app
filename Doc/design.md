@@ -27,7 +27,7 @@ anyone evaluating, deploying or contributing to the project. To get it running, 
 |---|---|---|
 | Frontend | S3 (private) + CloudFront | Static single-page app behind Origin Access Control, strict security headers |
 | API | API Gateway HTTP API | JWT authorizer on sender routes, throttled to 10 requests/s (burst 20) |
-| Backend | One Lambda function, Node.js 20 | Every route is handled by `src/index.ts` |
+| Backend | One Lambda function, Node.js 24 | Every route is handled by `src/index.ts` |
 | Schedule | EventBridge rule | Runs the monthly admin summary |
 | Sign-in | Cognito user pool + hosted UI | OIDC federation, native accounts, optional TOTP |
 | Email | SES | One verified sender address |
@@ -191,13 +191,24 @@ Only senders sign in. Receivers never need an account.
 - **First admin.** The first person to sign in on a new deployment becomes admin. A
   conditional write on a marker row makes this race-safe, so only one first login
   wins.
-- **Granting admin is deliberately not in the app.** There's no "make admin" button.
-  Promoting or demoting someone is a direct write to the roles table by someone with AWS
-  access. A hijacked admin session therefore can't create more admins, and a routine
-  `terraform apply` can't change who's an admin.
+- **Promoting and demoting admins** happens on Admin → Users, with safeguards:
+  - The admin must have signed in within the last 10 minutes. The ID token's
+    `auth_time` claim records the real sign-in, and refreshing tokens doesn't change
+    it, so an old stolen session can't do this.
+  - You can't change your own role, and the last admin can't be removed.
+  - Every admin, and the person affected, is emailed about each change, and the change
+    is logged as `admin.role.changed`.
+  - Demoting writes `role: "user"` instead of deleting the row, so the Lambda still has
+    no delete access to the roles table. A routine `terraform apply` never changes who's
+    an admin.
 - **Removing users.** Removing a local account revokes access. Removing an SSO account
   only clears Cognito's copy, because the identity provider still decides who can sign
-  in. You can't remove your own account.
+  in. You can't remove your own account. Removing an admin takes their role away first,
+  with the same safeguards, so the admin row can't outlive the account.
+- **History can't be deleted from the app.** The audit table is add-and-update only, so a
+  stolen admin session can't erase what was shared. Rows expire after a year. To delete
+  sooner, someone with AWS access runs the commands that Admin → Activity → **Reset**
+  shows for a date range and/or sender.
 
 ## Admin page
 
@@ -209,9 +220,17 @@ every admin endpoint checks the roles table on the server.
 
 ## Branding and sharing rules
 
-**Branding** sets the name, logo, accent color, support email and footer note. Everyone
-sees it, including receivers. In emails, the name is the From display name and the
-support email appears at the bottom. The logo must be a PNG, JPEG, WebP or GIF of up to
+**Branding** (the **Customize** tab) sets the theme, name, logo, support email and
+footer note. Everyone sees it, including receivers. There are four themes, each a full
+palette: **Obsidian** (black, brushed gold, crimson; the default), **Midnight** (navy, ice
+blue, sapphire), **Racing green** (forest black, champagne, green) and **Heritage**
+(graphite, powder blue, orange). Each keeps the same balance: the background carries most
+of the page, a secondary color marks headings, links and thin lines, and the primary
+color is kept for buttons and the active tab. All text meets WCAG AA contrast (4.5:1).
+The colors live in `style.css` under `[data-theme]`. Adding a theme means one block
+there, a logo in `public/logos/`, and its name in the theme lists in `settingsSchema.ts`
+(backend) and `branding.ts` (frontend). In emails, the name is
+the From display name and the support email appears at the bottom. The logo must be a PNG, JPEG, WebP or GIF of up to
 100 KB, stored as a `data:` URL. SVG isn't accepted, because an SVG is a document that
 can carry more than a picture. The frontend caches branding in local storage, so repeat
 visits load already branded.
@@ -234,6 +253,11 @@ The receiver's email names the sender's address, so they know who to expect it f
 A sender can tick **Email me when it's opened**. The first correct code entry then sends
 the sender a short note with the recipient, description and send time, never the
 secret. A failure to send that note never blocks the receiver.
+
+If the secret's own email can't be sent (for example, an unverified recipient while SES
+is in the sandbox), the stored secret is deleted at once and its history row is marked
+**Not sent**. The row isn't deleted, because the audit table is never deleted from.
+Not-sent rows are left out of the counts and the monthly summary.
 
 **Monthly summary.** When an admin turns it on under Admin → Activity, every admin gets
 an email at 08:00 UTC on the 1st with the previous month's counts (sent, opened,
@@ -262,7 +286,8 @@ twice. **Send me a preview** emails the last 30 days to just the admin who click
 | `GET`/`POST /admin/auth-settings` | Admin | Read or change self-sign-up |
 | `POST /admin/idp` | Admin | Add or update the SSO provider |
 | `GET`/`POST /admin/users` | Admin | List users, create a local account |
-| `POST /admin/users/remove` | Admin | Remove an account |
+| `POST /admin/users/remove` | Admin | Remove an account (an admin's needs a recent sign-in) |
+| `POST /admin/users/role` | Admin, signed in within 10 minutes | Make someone admin, or back to user |
 | `GET`/`POST /admin/settings` | Admin | Read or change branding, sharing rules and the monthly summary |
 | `POST /admin/summary/preview` | Admin | Email yourself a summary of the last 30 days |
 
@@ -291,6 +316,13 @@ twice. **Send me a preview** emails the last 30 days to just the admin who click
 ## Known limitations
 
 - No WAF (see above).
+- On the default `*.cloudfront.net` address, CloudFront also accepts TLS versions older
+  than 1.2. That address can't be restricted further. Use your own domain to require
+  TLS 1.2 or later.
+- No CAPTCHA on sign-up. The form is Cognito's hosted page, which doesn't take one, and
+  AWS WAF's CAPTCHA adds a monthly cost. A new account needs a working inbox to confirm
+  its email first, and "allowed sender domains" stops strangers from sending. For a
+  public deployment, turn self-sign-up off and add people from **Admin → Users**.
 - No independent penetration test has been done.
 - Dependabot keeps dependencies current, but static analysis only runs if GitHub's CodeQL
   default setup is switched on in the repository settings.

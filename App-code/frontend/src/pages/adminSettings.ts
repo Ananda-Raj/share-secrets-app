@@ -1,9 +1,8 @@
-import { getAdminSettings, updateAdminSettings, getMe, ApiError, type AdminSettings, type Branding } from "../api.js";
-import { applyBranding, logoSrc, DEFAULT_BRANDING } from "../branding.js";
+import { getAdminSettings, updateAdminSettings, getMe, ApiError, type AdminSettings, type Branding, type Theme } from "../api.js";
+import { applyBranding, logoSrc, THEMES } from "../branding.js";
 import { escapeHtml } from "../html.js";
 import { TTL_LABELS } from "./create.js";
 
-const DEFAULT_ACCENT = "#2563eb";
 const MAX_LOGO_BYTES = 100 * 1024;
 const LOGO_TYPES = ["image/png", "image/jpeg", "image/webp", "image/gif"];
 
@@ -28,10 +27,26 @@ export async function loadBrandingTab(container: HTMLElement): Promise<void> {
   if (!settings) return;
   const b = settings.branding;
   let logoDataUrl = b.logoDataUrl;
-  let accentIsDefault = !b.accentColor;
+  let theme = b.theme;
 
   container.innerHTML = `
     <p class="muted">How the app looks to everyone, including people receiving a secret. Also used in emails.</p>
+
+    <label id="b-theme-title">Theme</label>
+    <div class="theme-options" role="group" aria-labelledby="b-theme-title">
+      ${THEMES.map(
+        (t) => `
+        <button type="button" class="theme-option" data-theme="${t.id}" aria-pressed="${t.id === theme}">
+          <span class="theme-sample" aria-hidden="true">
+            <span class="theme-sample-title">Aa</span>
+            <span class="theme-sample-line"></span>
+            <span class="theme-sample-button">Send</span>
+          </span>
+          <span class="theme-name">${t.name}</span>
+          <span class="theme-desc">${t.description}</span>
+        </button>`
+      ).join("")}
+    </div>
 
     <label for="b-name">Name</label>
     <input id="b-name" type="text" maxlength="60" value="${escapeHtml(b.appName)}" />
@@ -47,32 +62,23 @@ export async function loadBrandingTab(container: HTMLElement): Promise<void> {
     </div>
     <p id="b-logo-error" class="error" role="alert"></p>
 
-    <label for="b-accent">Accent color</label>
-    <div class="color-row">
-      <input id="b-accent" type="color" value="${escapeHtml(b.accentColor || DEFAULT_ACCENT)}" />
-      <span id="b-accent-label" class="muted small"></span>
-      <button type="button" id="b-accent-reset" class="link-button">Use default color</button>
-    </div>
-
     <label for="b-support">Support email <span class="muted small">(optional, shown in the footer and in emails)</span></label>
     <input id="b-support" type="email" placeholder="it-help@example.com" value="${escapeHtml(b.supportEmail)}" />
 
     <label for="b-footer">Footer note <span class="muted small">(optional, e.g. "For Example Corp staff only")</span></label>
     <input id="b-footer" type="text" maxlength="200" value="${escapeHtml(b.footerText)}" />
 
-    <button id="b-save" class="primary">Save branding</button>
+    <button id="b-save" class="primary">Save changes</button>
     <p id="b-error" class="error" role="alert"></p>
-    <p id="b-success" class="hint hidden">Saved. Everyone sees the new branding on their next page load.</p>
+    <p id="b-success" class="hint hidden">Saved. Everyone sees the changes on their next page load.</p>
   `;
 
   const $ = <T extends HTMLElement>(sel: string) => container.querySelector<T>(sel)!;
   const preview = $<HTMLImageElement>("#b-logo-preview");
   const logoError = $<HTMLElement>("#b-logo-error");
-  const accent = $<HTMLInputElement>("#b-accent");
-  const accentLabel = $<HTMLElement>("#b-accent-label");
-
-  const showAccentLabel = () => (accentLabel.textContent = accentIsDefault ? "Default" : accent.value);
-  showAccentLabel();
+  const themeButtons = container.querySelectorAll<HTMLButtonElement>(".theme-option");
+  // the default logo matches the theme, so the preview follows the choice
+  const showLogo = () => (preview.src = logoSrc({ ...b, logoDataUrl, theme }));
 
   $<HTMLInputElement>("#b-logo").addEventListener("change", (e) => {
     logoError.textContent = "";
@@ -91,25 +97,23 @@ export async function loadBrandingTab(container: HTMLElement): Promise<void> {
     const reader = new FileReader();
     reader.onload = () => {
       logoDataUrl = String(reader.result);
-      preview.src = logoDataUrl;
+      showLogo();
     };
     reader.readAsDataURL(file);
   });
 
   $<HTMLButtonElement>("#b-logo-reset").addEventListener("click", () => {
     logoDataUrl = "";
-    preview.src = logoSrc(DEFAULT_BRANDING);
+    showLogo();
   });
 
-  accent.addEventListener("input", () => {
-    accentIsDefault = false;
-    showAccentLabel();
-  });
-  $<HTMLButtonElement>("#b-accent-reset").addEventListener("click", () => {
-    accentIsDefault = true;
-    accent.value = DEFAULT_ACCENT;
-    showAccentLabel();
-  });
+  themeButtons.forEach((button) =>
+    button.addEventListener("click", () => {
+      theme = button.dataset.theme as Theme;
+      themeButtons.forEach((other) => other.setAttribute("aria-pressed", String(other === button)));
+      showLogo();
+    })
+  );
 
   const saveButton = $<HTMLButtonElement>("#b-save");
   const errorEl = $<HTMLElement>("#b-error");
@@ -120,7 +124,7 @@ export async function loadBrandingTab(container: HTMLElement): Promise<void> {
     const branding: Branding = {
       appName: $<HTMLInputElement>("#b-name").value.trim(),
       logoDataUrl,
-      accentColor: accentIsDefault ? "" : accent.value,
+      theme,
       supportEmail: $<HTMLInputElement>("#b-support").value.trim(),
       footerText: $<HTMLInputElement>("#b-footer").value.trim(),
     };

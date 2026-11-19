@@ -23,7 +23,8 @@ export interface Period {
 const TOP_SENDERS = 5;
 const MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
 
-export function summarize(records: AuditRecord[], now: number): ActivitySummary {
+export function summarize(all: AuditRecord[], now: number): ActivitySummary {
+  const records = all.filter((r) => !r.failedAt); // never sent
   const counts = { sent: records.length, files: 0, opened: 0, expired: 0, revoked: 0, waiting: 0 };
   for (const r of records) {
     if (r.isFile) counts.files++;

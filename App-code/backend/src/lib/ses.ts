@@ -76,6 +76,26 @@ export async function sendActivitySummary(to: string, subject: string, text: str
   await send(to, subject, text, branding);
 }
 
+/** Sent to every admin and the person affected whenever someone's admin role changes. */
+export async function sendRoleChangeNotice(
+  to: string,
+  targetEmail: string,
+  isAdminNow: boolean,
+  changedBy: string,
+  branding: Branding
+): Promise<void> {
+  const change = isAdminNow ? "is now an admin" : "is no longer an admin";
+  const text = [
+    `${targetEmail} ${change} of ${branding.appName}.`,
+    "",
+    `Changed by ${changedBy} at ${new Date().toISOString()}.`,
+    "",
+    `Every admin gets this email for each change. If you didn't expect it, check Admin → Users: ${config.frontendOrigin}/admin`,
+    ...supportLines(branding),
+  ].join("\n");
+  await send(to, `${branding.appName}: ${targetEmail} ${change}`, text, branding);
+}
+
 /**
  * Resend deliberately re-sends only a fresh OTP, never a reconstructed link — the
  * fragment key (`k1`) is only ever transient, used once at creation to build the

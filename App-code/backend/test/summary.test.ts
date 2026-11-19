@@ -38,6 +38,13 @@ test("summarize counts each status once", () => {
   assert.deepEqual(s.topSenders[0], { senderEmail: "a@example.com", count: 4 });
 });
 
+test("summarize leaves out shares whose email was never sent", () => {
+  const s = summarize([rec({}), rec({ failedAt: NOW - 10, senderEmail: "b@example.com" })], NOW);
+  assert.equal(s.sent, 1);
+  assert.equal(s.waiting, 1);
+  assert.equal(s.senders, 1);
+});
+
 test("summarize keeps only the top 5 senders", () => {
   const records = ["a", "b", "c", "d", "e", "f"].map((x) => rec({ senderEmail: `${x}@example.com` }));
   const s = summarize(records, NOW);

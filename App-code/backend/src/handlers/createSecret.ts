@@ -1,8 +1,9 @@
-import { putSecret } from "../lib/dynamo.js";
-import { createAuditRecord } from "../lib/audit.js";
+import { putSecret, deleteSecret } from "../lib/dynamo.js";
+import { createAuditRecord, markFailed } from "../lib/audit.js";
 import { generateSecretId, generateOtp } from "../lib/ids.js";
 import { hashOtp } from "../lib/otp.js";
 import { sendSecretEmail } from "../lib/ses.js";
+import { isRecipientRejected } from "../lib/sesErrors.js";
 import { getCallerEmail, UnauthorizedError } from "../lib/auth.js";
 import { getSettings } from "../lib/settings.js";
 import { emailMatchesDomains } from "../lib/settingsSchema.js";
@@ -91,7 +92,22 @@ export async function createSecret(event: ApiEvent) {
     });
 
     const link = `${config.frontendOrigin}/s/${id}#${k1}`;
-    await sendSecretEmail(recipientEmail, link, otp, Math.round(config.otpTtlSeconds / 60), subject, senderEmail, branding);
+    try {
+      await sendSecretEmail(recipientEmail, link, otp, Math.round(config.otpTtlSeconds / 60), subject, senderEmail, branding);
+    } catch (err) {
+      // Nothing was sent: delete the secret and mark the history row "Not sent".
+      const undo = await Promise.allSettled([deleteSecret(id), markFailed(id, now)]);
+      if (undo.some((r) => r.status === "rejected")) log("secret.rollback.error", { id });
+      log("secret.email.error", { id, error: String(err) });
+      if (isRecipientRejected(err)) {
+        return json(
+          422,
+          { error: `Couldn't email ${recipientEmail}. While email is in test (sandbox) mode, each recipient has to be verified first.` },
+          config.frontendOrigin
+        );
+      }
+      return json(502, { error: "email_failed" }, config.frontendOrigin);
+    }
 
     log("secret.created", { id, mode: "email-otp" });
     return json(201, { id }, config.frontendOrigin);

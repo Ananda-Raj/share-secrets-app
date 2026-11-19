@@ -27,6 +27,7 @@ export interface AuditRecord {
   claimedAt?: number; // epoch seconds — set once, first successful OTP verification
   confirmedAt?: number; // epoch seconds — set on explicit post-decrypt confirmation
   revokedAt?: number; // epoch seconds — sender cancelled it before it was ever claimed
+  failedAt?: number; // epoch seconds — the email couldn't be sent, so the secret was deleted
   notifyOnOpen?: boolean; // email the sender on first open
   expiresAt: number; // epoch seconds, DynamoDB TTL attribute — createdAt + 1 year
 }
@@ -78,6 +79,18 @@ export async function markRevoked(secretId: string, revokedAt: number): Promise<
       Key: { secretId },
       UpdateExpression: "SET revokedAt = :revokedAt",
       ExpressionAttributeValues: { ":revokedAt": revokedAt },
+    })
+  );
+}
+
+/** Kept rather than deleted: this table is never deleted from (see modules/backend-api). */
+export async function markFailed(secretId: string, failedAt: number): Promise<void> {
+  await docClient.send(
+    new UpdateCommand({
+      TableName: config.auditTableName,
+      Key: { secretId },
+      UpdateExpression: "SET failedAt = :failedAt",
+      ExpressionAttributeValues: { ":failedAt": failedAt },
     })
   );
 }

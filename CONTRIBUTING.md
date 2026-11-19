@@ -16,7 +16,7 @@ Thanks for considering a contribution. A few notes to make it go smoothly.
 
 ```
 App-code/frontend/   Vite + TypeScript single-page app, no UI framework, no runtime deps
-App-code/backend/    Node.js 20 + TypeScript Lambda, one function routed by src/index.ts
+App-code/backend/    Node.js 24 + TypeScript Lambda, one function routed by src/index.ts
 Infra/               Terraform, applied locally, never from CI
 Doc/                 Design and deployment guides
 ```

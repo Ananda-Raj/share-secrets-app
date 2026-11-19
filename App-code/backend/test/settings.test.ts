@@ -27,27 +27,27 @@ test("validateBranding accepts a full, valid branding", () => {
   const b = validateBranding({
     appName: "  Acme Secrets ",
     logoDataUrl: PNG,
-    accentColor: "#AA3300",
+    theme: "midnight",
     supportEmail: "it@acme.com",
     footerText: "Internal use only",
   });
   assert.equal(b.appName, "Acme Secrets");
-  assert.equal(b.accentColor, "#aa3300");
+  assert.equal(b.theme, "midnight");
   assert.equal(b.logoDataUrl, PNG);
 });
 
 test("validateBranding allows optional fields to be empty", () => {
   const b = validateBranding({ appName: "Acme" });
-  assert.deepEqual(b, { appName: "Acme", logoDataUrl: "", accentColor: "", supportEmail: "", footerText: "" });
+  assert.deepEqual(b, { appName: "Acme", logoDataUrl: "", theme: "obsidian", supportEmail: "", footerText: "" });
 });
 
 test("validateBranding requires a name", () => {
   assert.throws(() => validateBranding({ appName: "   " }), ValidationError);
 });
 
-test("validateBranding rejects bad colors, emails and control characters", () => {
-  assert.throws(() => validateBranding({ appName: "A", accentColor: "red" }), ValidationError);
-  assert.throws(() => validateBranding({ appName: "A", accentColor: "#12345" }), ValidationError);
+test("validateBranding rejects unknown themes, bad emails and control characters", () => {
+  assert.throws(() => validateBranding({ appName: "A", theme: "pink" }), ValidationError);
+  assert.throws(() => validateBranding({ appName: "A", theme: 3 }), ValidationError);
   assert.throws(() => validateBranding({ appName: "A", supportEmail: "not-an-email" }), ValidationError);
   assert.throws(() => validateBranding({ appName: "A\nB" }), ValidationError);
 });
@@ -105,6 +105,13 @@ test("withDefaults fills in missing fields", () => {
   assert.equal(s.branding.footerText, "");
   assert.equal(s.policy.fileSharingEnabled, true);
   assert.equal(s.reports.monthlySummary, false);
+});
+
+test("withDefaults drops old fields and falls back from an unknown theme", () => {
+  const stored = { branding: { appName: "Acme", accentColor: "#aa3300", theme: "pink" } };
+  const s = withDefaults(stored as unknown as Parameters<typeof withDefaults>[0]);
+  assert.equal(s.branding.theme, "obsidian");
+  assert.equal("accentColor" in s.branding, false);
 });
 
 test("validateReports needs a real boolean", () => {

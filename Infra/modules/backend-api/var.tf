@@ -69,10 +69,6 @@ variable "ses_sender_email" {
   type = string
 }
 
-variable "ses_identity_arn" {
-  type = string
-}
-
 variable "grace_seconds" {
   type = number
 }

@@ -43,9 +43,13 @@ them:
   would make offline brute force possible.
 - **Burn after read allows a 5-minute grace window** after the first correct code, so a
   failed decrypt doesn't destroy the secret.
-- **Granting admin isn't possible from inside the app.** It needs the first-login
-  bootstrap or direct access to the roles table, so a hijacked admin session can't
-  create more admins.
+- **Admins can promote and demote other admins, with safeguards.** It needs a sign-in
+  within the last 10 minutes, so an old stolen session can't do it. You can't change
+  your own role or remove the last admin, and every admin is emailed about each change.
+- **History can't be deleted from inside the app.** The app can add to the audit trail
+  but never delete from it, so a stolen admin session can't erase what was shared. Rows
+  expire after a year; deleting sooner needs AWS access (Admin → Activity → Reset shows
+  the commands).
 - **Only the sender can revoke a send,** never an admin on their behalf.
 - **Turning off file attachments is advisory.** The server can't see inside the
   ciphertext, so a modified client could still send a file as text.

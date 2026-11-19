@@ -2,37 +2,83 @@
    Design tokens
    ========================================================================== */
 
-:root {
-  --bg: #f4f5f7;
-  --card-bg: #ffffff;
-  --text: #1b1e24;
-  --muted: #6b7280;
-  --border: #d9dce1;
-  --primary: #2563eb;
-  --primary-hover: #1d4ed8;
-  --primary-text: #ffffff;
-  --error: #b91c1c;
-  --focus-ring: rgba(37, 99, 235, 0.35);
-  --radius: 12px;
-  --radius-sm: 8px;
-  --shadow: 0 1px 2px rgba(16, 24, 40, 0.04), 0 8px 24px rgba(16, 24, 40, 0.06);
-  --font-sans-fallback: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+/* Themes. branding.ts sets data-theme on <html>; Obsidian is the default.
+   Each one: 60% background, 30% secondary (headings, logo, links, lines),
+   10% primary (buttons, active tab). Keep the default first: later rules win. */
+:root,
+[data-theme="obsidian"] {
+  --bg: #0b0b0c;
+  --card-bg: #141416;
+  --text: #f5f2eb;
+  --muted: #a39d93;
+  --border: #373023;
+  --secondary: #c5a059;
+  --primary: #8c0000;
+  --primary-hover: #a61212;
+  --primary-text: #f5f2eb;
+  --focus-ring: rgba(197, 160, 89, 0.5);
+  --glow-1: #8c0000;
+  --glow-2: #c5a059;
+  --glow-3: #5a0000;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --bg: #0f1115;
-    --card-bg: #181b21;
-    --text: #e8eaed;
-    --muted: #9aa1ac;
-    --border: #2b2f37;
-    --primary: #3b82f6;
-    --primary-hover: #60a5fa;
-    --primary-text: #ffffff;
-    --error: #f87171;
-    --focus-ring: rgba(59, 130, 246, 0.4);
-    --shadow: 0 1px 2px rgba(0, 0, 0, 0.3), 0 8px 24px rgba(0, 0, 0, 0.35);
-  }
+[data-theme="midnight"] {
+  --bg: #0a0e17;
+  --card-bg: #10151f;
+  --text: #eef2f7;
+  --muted: #9aa5b5;
+  --border: #2f3747;
+  --secondary: #a9c1e8;
+  --primary: #1f4fb4;
+  --primary-hover: #2d60c8;
+  --primary-text: #eef2f7;
+  --focus-ring: rgba(169, 193, 232, 0.5);
+  --glow-1: #1f4fb4;
+  --glow-2: #a9c1e8;
+  --glow-3: #0b2a66;
+}
+
+[data-theme="racing"] {
+  --bg: #0a0f0c;
+  --card-bg: #111813;
+  --text: #f1efe6;
+  --muted: #a0a89f;
+  --border: #383a2b;
+  --secondary: #d4c08a;
+  --primary: #1e5b3c;
+  --primary-hover: #2a6f4b;
+  --primary-text: #f1efe6;
+  --focus-ring: rgba(212, 192, 138, 0.5);
+  --glow-1: #1e5b3c;
+  --glow-2: #d4c08a;
+  --glow-3: #0c3322;
+}
+
+[data-theme="heritage"] {
+  --bg: #0d0f11;
+  --card-bg: #15181b;
+  --text: #f2f4f5;
+  --muted: #9ba3aa;
+  --border: #2d3a44;
+  --secondary: #8ec3e6;
+  --primary: #e8721c;
+  --primary-hover: #f08433;
+  --primary-text: #15181b;
+  --focus-ring: rgba(142, 195, 230, 0.5);
+  --glow-1: #e8721c;
+  --glow-2: #8ec3e6;
+  --glow-3: #1e4a66;
+}
+
+:root {
+  color-scheme: dark;
+  --error: #ef6b6b;
+  --success: #8fca8f;
+  --font-serif: "Iowan Old Style", "Palatino Linotype", Palatino, "Book Antiqua", Georgia, serif;
+  --radius: 12px;
+  --radius-sm: 8px;
+  --shadow: 0 1px 2px rgba(0, 0, 0, 0.4), 0 12px 32px rgba(0, 0, 0, 0.45);
+  --font-sans-fallback: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
 }
 
 * {
@@ -57,35 +103,29 @@
   height: 46vmax;
   border-radius: 50%;
   filter: blur(70px);
-  opacity: 0.3;
+  opacity: 0.18;
   will-change: transform;
 }
 
 .blob-1 {
   top: -14%;
   left: -14%;
-  background: radial-gradient(circle, var(--primary), transparent 70%);
+  background: radial-gradient(circle, var(--glow-1), transparent 70%);
   animation: blobDrift1 32s ease-in-out infinite;
 }
 
 .blob-2 {
   top: 26%;
   right: -18%;
-  background: radial-gradient(circle, #14b8a6, transparent 70%);
+  background: radial-gradient(circle, var(--glow-2), transparent 70%);
   animation: blobDrift2 40s ease-in-out infinite;
 }
 
 .blob-3 {
   bottom: -16%;
   left: 18%;
-  background: radial-gradient(circle, #8b5cf6, transparent 70%);
+  background: radial-gradient(circle, var(--glow-3), transparent 70%);
   animation: blobDrift3 36s ease-in-out infinite;
-}
-
-@media (prefers-color-scheme: dark) {
-  .blob {
-    opacity: 0.4;
-  }
 }
 
 @keyframes blobDrift1 {
@@ -111,7 +151,7 @@
 
 /* Toggled via classList, never inline styles — CSP's style-src 'self' (no
    'unsafe-inline') blocks the style="" attribute. (CSSOM writes such as
-   style.setProperty are allowed; branding.ts uses them for the accent color.)
+   style.setProperty are allowed.)
    !important so this always wins over an element's own display rule (e.g.
    .file-picker-clear sets display: flex) regardless of source order. */
 .hidden {
@@ -139,22 +179,30 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 
+/* Full width, so a card's size never depends on what's inside it. */
+#app {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
 /* One width for every page -- login/create/history/admin all use plain .card. */
 .card {
   width: 100%;
   max-width: 720px;
-  background: var(--card-bg);
+  /* gold hairline along the top edge */
+  background: linear-gradient(90deg, transparent, var(--secondary), transparent) top / 100% 1px no-repeat, var(--card-bg);
   border: 1px solid var(--border);
   border-radius: var(--radius);
   box-shadow: var(--shadow);
   padding: 30px;
 }
 
-/* History only -- wide enough for its table's columns to sit comfortably with no
-   horizontal scrolling, while .nav above it (shared by every authenticated page) stays
-   at the standard 720px so the nav's position never shifts between pages. */
+/* History and Admin: wide enough for their tables to fit without sideways scrolling.
+   .nav stays at 720px so its links never shift between pages. */
 .card-wide {
-  max-width: 900px;
+  max-width: 960px;
 }
 
 .card + .card {
@@ -182,15 +230,15 @@ body {
 }
 
 .brand:hover .brand-name {
-  color: var(--primary);
+  color: var(--text);
 }
 
 .brand-name {
-  font-family: var(--font-sans-fallback);
-  font-weight: 700;
-  font-size: 1.05rem;
-  letter-spacing: -0.01em;
-  color: var(--text);
+  font-family: var(--font-serif);
+  font-weight: 600;
+  font-size: 1.15rem;
+  letter-spacing: 0.01em;
+  color: var(--secondary);
 }
 
 /* Admin-set logos can be wide wordmarks. */
@@ -213,15 +261,21 @@ body {
    Typography
    ========================================================================== */
 
+h1,
+h2 {
+  font-family: var(--font-serif);
+  color: var(--secondary);
+  letter-spacing: 0.01em;
+}
+
 h1 {
-  font-size: 1.4rem;
-  font-weight: 700;
-  letter-spacing: -0.01em;
+  font-size: 1.6rem;
+  font-weight: 600;
   margin: 0 0 6px;
 }
 
 h2 {
-  font-size: 1.05rem;
+  font-size: 1.15rem;
   font-weight: 600;
   margin: 26px 0 10px;
 }
@@ -314,7 +368,7 @@ textarea {
   align-items: center;
   margin: 0;
   padding: 10px 14px;
-  background: var(--border);
+  background: color-mix(in srgb, var(--text) 9%, var(--card-bg));
   color: var(--text);
   font-size: 0.85rem;
   font-weight: 600;
@@ -324,7 +378,7 @@ textarea {
 }
 
 .file-picker-btn:hover {
-  background: color-mix(in srgb, var(--border) 70%, var(--muted));
+  background: color-mix(in srgb, var(--text) 15%, var(--card-bg));
 }
 
 .sr-only:focus-visible + .file-picker-btn {
@@ -365,7 +419,7 @@ textarea {
 }
 
 .file-picker-clear:hover {
-  background: var(--border);
+  background: color-mix(in srgb, var(--text) 9%, var(--card-bg));
   color: var(--error);
 }
 
@@ -430,7 +484,7 @@ textarea {
 .link-back {
   display: inline-block;
   margin-top: 18px;
-  color: var(--primary);
+  color: var(--secondary);
   font-size: 0.88rem;
   font-weight: 600;
   text-decoration: none;
@@ -447,7 +501,7 @@ textarea {
   padding: 0;
   border: none;
   background: none;
-  color: var(--primary);
+  color: var(--secondary);
   font-size: 0.88rem;
   font-weight: 600;
   font-family: inherit;
@@ -476,9 +530,10 @@ button:focus-visible {
    Tabs (auth mode picker, admin page sections)
    ========================================================================== */
 
+/* Grid, so every tab is the same width even when they wrap on a phone. */
 .tabs {
-  display: flex;
-  flex-wrap: wrap;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(110px, 1fr));
   gap: 6px;
   margin-top: 18px;
   border: 1px solid var(--border);
@@ -487,7 +542,6 @@ button:focus-visible {
 }
 
 .tab {
-  flex: 1;
   padding: 8px;
   border: none;
   border-radius: 6px;
@@ -497,6 +551,10 @@ button:focus-visible {
   font-weight: 600;
   cursor: pointer;
   transition: background 0.15s ease, color 0.15s ease;
+}
+
+#tab-content {
+  margin-top: 18px;
 }
 
 .tab:hover:not(.active) {
@@ -566,24 +624,23 @@ button:focus-visible {
 }
 
 .badge-waiting {
-  background: rgba(107, 114, 128, 0.15);
+  background: color-mix(in srgb, var(--muted) 15%, transparent);
   color: var(--muted);
 }
 
 .badge-pending {
-  background: rgba(37, 99, 235, 0.15);
-  color: var(--primary);
+  background: color-mix(in srgb, var(--secondary) 15%, transparent);
+  color: var(--secondary);
 }
 
 .badge-done {
-  background: rgba(21, 128, 61, 0.15);
-  color: #15803d;
+  background: color-mix(in srgb, var(--success) 14%, transparent);
+  color: var(--success);
 }
 
-@media (prefers-color-scheme: dark) {
-  .badge-done {
-    color: #4ade80;
-  }
+.badge-failed {
+  background: color-mix(in srgb, var(--error) 14%, transparent);
+  color: var(--error);
 }
 
 /* ==========================================================================
@@ -604,7 +661,7 @@ button:focus-visible {
 }
 
 .nav-link.active {
-  color: var(--primary);
+  color: var(--secondary);
 }
 
 .nav-link:hover {
@@ -612,7 +669,7 @@ button:focus-visible {
 }
 
 .nav-link.active:hover {
-  color: var(--primary);
+  color: var(--secondary);
 }
 
 .nav-logout {
@@ -639,6 +696,116 @@ button:focus-visible {
 .filter-row input[type="date"] {
   width: auto;
   padding: 7px 10px;
+}
+
+.filter-row .link-button {
+  margin-top: 0;
+}
+
+.filter-row-end {
+  display: flex;
+  gap: 16px;
+  margin-left: auto;
+}
+
+.link-button.link-danger {
+  color: var(--error);
+}
+
+/* Reset panel: explanation, filters and copyable commands. */
+.panel {
+  margin: 12px 0 8px;
+  padding: 16px 18px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg);
+}
+
+.panel-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+}
+
+.panel-head .link-button {
+  margin-top: 0;
+}
+
+.panel-title {
+  margin: 0 0 6px;
+  font-family: var(--font-serif);
+  font-size: 1.1rem;
+  font-weight: 600;
+  color: var(--secondary);
+}
+
+.reset-fields {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 0 12px;
+}
+
+.reset-fields label {
+  margin: 10px 0 0;
+  font-size: 0.8rem;
+}
+
+.reset-fields input {
+  margin-top: 4px;
+  padding: 7px 10px;
+}
+
+.step-title {
+  margin: 14px 0 4px;
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+
+.command {
+  position: relative;
+}
+
+.command .code-hint {
+  margin: 0 0 4px;
+  padding-right: 70px;
+}
+
+.command .link-button {
+  position: absolute;
+  top: 8px;
+  right: 12px;
+  margin: 0;
+}
+
+/* One-line form: input plus button, e.g. adding a local account. */
+.inline-form {
+  display: flex;
+  gap: 10px;
+  margin-top: 8px;
+}
+
+.inline-form input {
+  flex: 1;
+}
+
+.inline-form .primary {
+  width: auto;
+  margin-top: 0;
+  padding: 10px 18px;
+  white-space: nowrap;
+}
+
+.created-account input {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+.row-actions {
+  display: inline-flex;
+  gap: 16px;
+}
+
+.row-actions .link-button {
+  margin-top: 0;
 }
 
 /* Wraps a wide table (history/audit) inside the fixed-width .card -- the table itself
@@ -711,11 +878,10 @@ button:focus-visible {
 }
 
 .site-footer a {
-  color: var(--primary);
+  color: var(--secondary);
 }
 
-.logo-row,
-.color-row {
+.logo-row {
   display: flex;
   align-items: center;
   flex-wrap: wrap;
@@ -734,14 +900,85 @@ button:focus-visible {
   background: var(--card-bg);
 }
 
-.color-row input[type="color"] {
-  width: 48px;
-  height: 36px;
-  padding: 2px;
+/* Theme picker. Each option carries its own data-theme, so it previews itself. */
+.theme-options {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 12px;
+  margin-top: 6px;
+}
+
+.theme-option {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: 0;
+  padding: 10px;
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
-  background: var(--card-bg);
+  background: var(--bg);
+  color: var(--text);
+  font-family: inherit;
+  text-align: left;
   cursor: pointer;
+  transition: border-color 0.15s ease;
+}
+
+.theme-option:hover {
+  border-color: var(--muted);
+}
+
+.theme-option[aria-pressed="true"] {
+  border-color: var(--secondary);
+  box-shadow: 0 0 0 1px var(--secondary);
+}
+
+.theme-sample {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 8px;
+  padding: 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: linear-gradient(90deg, transparent, var(--secondary), transparent) top / 100% 1px no-repeat, var(--card-bg);
+}
+
+.theme-sample-title {
+  font-family: var(--font-serif);
+  font-size: 1.05rem;
+  font-weight: 600;
+  line-height: 1.2;
+  color: var(--secondary);
+}
+
+.theme-sample-line {
+  width: 75%;
+  height: 5px;
+  border-radius: 3px;
+  background: var(--muted);
+  opacity: 0.5;
+}
+
+.theme-sample-button {
+  padding: 3px 0;
+  border-radius: 4px;
+  background: var(--primary);
+  color: var(--primary-text);
+  font-size: 0.72rem;
+  font-weight: 600;
+  text-align: center;
+}
+
+.theme-name {
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+
+.theme-desc {
+  font-size: 0.78rem;
+  line-height: 1.35;
+  color: var(--muted);
 }
 
 .send-failures {

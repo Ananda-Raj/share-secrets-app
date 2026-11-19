@@ -129,7 +129,8 @@ resource "aws_cloudfront_distribution" "frontend" {
     cloudfront_default_certificate = var.domain_name == "" ? true : null
     acm_certificate_arn            = var.domain_name != "" ? var.acm_certificate_arn : null
     ssl_support_method             = var.domain_name != "" ? "sni-only" : null
-    minimum_protocol_version       = "TLSv1.2_2021"
+    # The default *.cloudfront.net certificate always uses TLSv1; setting it there causes a diff every plan.
+    minimum_protocol_version = var.domain_name != "" ? "TLSv1.2_2021" : null
   }
 
   tags = var.tags

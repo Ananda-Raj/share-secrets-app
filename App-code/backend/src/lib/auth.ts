@@ -17,3 +17,16 @@ export function getCallerEmail(event: ApiEvent): string {
   if (!email) throw new UnauthorizedError("Missing authenticated caller identity");
   return email;
 }
+
+export class ReauthRequiredError extends Error {}
+
+/** Changing admins needs a sign-in this recent, so an old stolen token can't do it. */
+export const RECENT_SIGN_IN_SECONDS = 10 * 60;
+
+/** auth_time is when the user last actually signed in; refreshing tokens doesn't change it. */
+export function requireRecentSignIn(event: ApiEvent, nowSeconds = Math.floor(Date.now() / 1000)): void {
+  const authTime = Number(event.requestContext?.authorizer?.jwt?.claims?.auth_time);
+  if (!Number.isFinite(authTime) || nowSeconds - authTime > RECENT_SIGN_IN_SECONDS) {
+    throw new ReauthRequiredError("A recent sign-in is required");
+  }
+}

@@ -7,15 +7,14 @@ import { log } from "../lib/logger.js";
 import type { ApiEvent } from "../types.js";
 
 /** GET /admin/users — every Cognito user, SSO and local, with status and role. Also
- * returns the caller's own email (so the frontend can hide its own row's remove button)
- * and the roles table name (so it can show a ready-to-copy promote-to-admin command). */
+ * returns the caller's own email, so the frontend can hide its own row's buttons. */
 export async function getAdminUsers(event: ApiEvent) {
   try {
     const callerEmail = getCallerEmail(event);
     await requireAdmin(callerEmail);
     const [cognitoUsers, adminEmails] = await Promise.all([listUsers(), listAdminEmails()]);
     const users = cognitoUsers.map((u) => ({ ...u, isAdmin: adminEmails.has(u.email.toLowerCase()) }));
-    return json(200, { users, yourEmail: callerEmail, rolesTableName: config.rolesTableName }, config.frontendOrigin);
+    return json(200, { users, yourEmail: callerEmail }, config.frontendOrigin);
   } catch (err) {
     if (err instanceof UnauthorizedError) return json(401, { error: "unauthorized" }, config.frontendOrigin);
     if (err instanceof ForbiddenError) return json(403, { error: "forbidden" }, config.frontendOrigin);

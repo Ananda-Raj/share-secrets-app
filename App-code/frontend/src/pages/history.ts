@@ -70,7 +70,7 @@ function renderTable(items: HistoryItem[]): string {
 }
 
 function rowHtml(item: HistoryItem): string {
-  const pending = !item.claimedAt && !item.confirmedAt && !item.revokedAt && !isExpired(item);
+  const pending = !item.claimedAt && !item.confirmedAt && !item.revokedAt && !item.failedAt && !isExpired(item);
   return `
     <tr>
       <td>${formatDate(item.createdAt)}</td>
@@ -107,6 +107,7 @@ function typeLabel(item: HistoryItem): string {
 }
 
 function statusBadge(item: HistoryItem): string {
+  if (item.failedAt) return `<span class="badge badge-failed">Not sent</span>`;
   if (item.revokedAt) return `<span class="badge badge-waiting">Revoked</span>`;
   if (item.confirmedAt) return `<span class="badge badge-done">Viewed</span>`;
   if (item.claimedAt) return `<span class="badge badge-pending">Opened</span>`;

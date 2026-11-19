@@ -13,6 +13,7 @@ import { adminConfigureIdp } from "./handlers/adminConfigureIdp.js";
 import { adminCreateLocalUser } from "./handlers/adminCreateLocalUser.js";
 import { getAdminUsers } from "./handlers/getAdminUsers.js";
 import { adminRemoveUser } from "./handlers/adminRemoveUser.js";
+import { adminSetRole } from "./handlers/adminSetRole.js";
 import { getAuthConfig } from "./handlers/getAuthConfig.js";
 import { getBranding } from "./handlers/getBranding.js";
 import { getAdminSettings, updateAdminSettings } from "./handlers/adminSettings.js";
@@ -49,6 +50,7 @@ const ROUTES: Array<{ method: string; pattern: RegExp; handle: (e: ApiEvent, id:
   { method: "POST", pattern: /^\/admin\/users$/, handle: (e) => adminCreateLocalUser(e) },
   { method: "GET", pattern: /^\/admin\/users$/, handle: (e) => getAdminUsers(e) },
   { method: "POST", pattern: /^\/admin\/users\/remove$/, handle: (e) => adminRemoveUser(e) },
+  { method: "POST", pattern: /^\/admin\/users\/role$/, handle: (e) => adminSetRole(e) },
   { method: "GET", pattern: /^\/auth-config$/, handle: () => getAuthConfig() },
   { method: "GET", pattern: /^\/branding$/, handle: () => getBranding() },
   { method: "GET", pattern: /^\/admin\/settings$/, handle: (e) => getAdminSettings(e) },

@@ -23,5 +23,7 @@ Infra/modules/*/build/
 
 # misc
 .DS_Store
+# unredacted local screenshots; the redacted ones are in Doc/screenshots/
+/Screenshots/
 *.log
 coverage/

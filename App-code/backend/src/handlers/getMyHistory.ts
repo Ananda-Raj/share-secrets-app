@@ -25,6 +25,7 @@ export async function getMyHistory(event: ApiEvent) {
           claimedAt: r.claimedAt ?? null,
           confirmedAt: r.confirmedAt ?? null,
           revokedAt: r.revokedAt ?? null,
+          failedAt: r.failedAt ?? null,
         })),
       },
       config.frontendOrigin

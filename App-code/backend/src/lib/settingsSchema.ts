@@ -2,10 +2,13 @@ import { ValidationError } from "./validation.js";
 
 // Admin-editable settings. Pure functions only, so this file is unit-testable without AWS.
 
+export const THEMES = ["obsidian", "midnight", "racing", "heritage"] as const;
+export type Theme = (typeof THEMES)[number];
+
 export interface Branding {
   appName: string;
   logoDataUrl: string; // "" = default logo
-  accentColor: string; // "" = default color
+  theme: Theme;
   supportEmail: string; // "" = none
   footerText: string; // "" = none
 }
@@ -43,7 +46,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   branding: {
     appName: "SecretShare",
     logoDataUrl: "",
-    accentColor: "",
+    theme: "obsidian",
     supportEmail: "",
     footerText: "",
   },
@@ -60,7 +63,6 @@ export const DEFAULT_SETTINGS: AppSettings = {
 };
 
 const CONTROL_CHARS_RE = /[\r\n\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/;
-const HEX_COLOR_RE = /^#[0-9a-fA-F]{6}$/;
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 // No SVG: an SVG is a document, and a raster image is all a logo needs.
 const LOGO_RE = /^data:image\/(png|jpeg|webp|gif);base64,[A-Za-z0-9+/]+={0,2}$/;
@@ -86,10 +88,8 @@ export function validateBranding(input: unknown): Branding {
   const supportEmail = plainText(b.supportEmail, "supportEmail", 254, false);
   if (supportEmail && !EMAIL_RE.test(supportEmail)) throw new ValidationError("supportEmail is invalid");
 
-  const accentColor = plainText(b.accentColor, "accentColor", 7, false).toLowerCase();
-  if (accentColor && !HEX_COLOR_RE.test(accentColor)) {
-    throw new ValidationError("accentColor must look like #1a2b3c");
-  }
+  const theme = b.theme === undefined || b.theme === "" ? DEFAULT_SETTINGS.branding.theme : b.theme;
+  if (!isTheme(theme)) throw new ValidationError(`theme must be one of: ${THEMES.join(", ")}`);
 
   const logoDataUrl = typeof b.logoDataUrl === "string" ? b.logoDataUrl : "";
   if (logoDataUrl) {
@@ -97,7 +97,11 @@ export function validateBranding(input: unknown): Branding {
     if (!LOGO_RE.test(logoDataUrl)) throw new ValidationError("logo must be a PNG, JPEG, WebP or GIF image");
   }
 
-  return { appName, logoDataUrl, accentColor, supportEmail, footerText };
+  return { appName, logoDataUrl, theme, supportEmail, footerText };
+}
+
+function isTheme(value: unknown): value is Theme {
+  return THEMES.includes(value as Theme);
 }
 
 /** Accepts a list or a comma/space/newline-separated string; "@acme.com" works too. */
@@ -162,8 +166,16 @@ export function emailMatchesDomains(email: string, domains: string[]): boolean {
 export function withDefaults(
   stored: Partial<{ branding: Partial<Branding>; policy: Partial<SharingPolicy>; reports: Partial<Reports> }> | undefined
 ): AppSettings {
+  // Known fields only, so ones from older versions (like accentColor) are dropped.
+  const b = { ...DEFAULT_SETTINGS.branding, ...(stored?.branding ?? {}) };
   return {
-    branding: { ...DEFAULT_SETTINGS.branding, ...(stored?.branding ?? {}) },
+    branding: {
+      appName: b.appName,
+      logoDataUrl: b.logoDataUrl,
+      theme: isTheme(b.theme) ? b.theme : DEFAULT_SETTINGS.branding.theme,
+      supportEmail: b.supportEmail,
+      footerText: b.footerText,
+    },
     policy: { ...DEFAULT_SETTINGS.policy, ...(stored?.policy ?? {}) },
     reports: { ...DEFAULT_SETTINGS.reports, ...(stored?.reports ?? {}) },
   };

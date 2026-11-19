@@ -1,18 +1,18 @@
 name: Release
 
-# Manual only. Tags the current main HEAD and creates a GitHub Release with
-# auto-generated notes since the last tag -- lets you (or anyone deploying this
-# project) pin to a known-good version instead of always tracking main directly.
-#
-# Deliberately simpler than a multi-branch (develop/test/main) versioning pipeline: this
-# project has one branch and two independent manual deploy workflows, not a promotion
-# pipeline, so there's nothing for per-branch tagging to model here. Just: pick a bump
-# type, get a tag + release.
+# Manual only. Tags the current main HEAD and creates a GitHub Release, so anyone
+# deploying this project can pin to a known-good version instead of tracking main.
+# The notes come from that version's section in CHANGELOG.md, or are generated from
+# commits if there isn't one.
 on:
   workflow_dispatch:
     inputs:
+      version:
+        description: "Exact version, e.g. 2.0.0. Leave empty to bump the latest tag."
+        required: false
+        default: ""
       bump_type:
-        description: "Which part of the version to bump"
+        description: "Used only when version is empty"
         required: true
         type: choice
         options: [patch, minor, major]
@@ -25,38 +25,45 @@ jobs:
   tag-and-release:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0 # need full history to see all existing tags
           fetch-tags: true
 
       - name: Compute next version
         id: version
+        env:
+          # Passed as env, not inlined, so the input can't inject shell.
+          VERSION_INPUT: ${{ inputs.version }}
+          BUMP_TYPE: ${{ inputs.bump_type }}
         run: |
-          LATEST=$(git tag -l 'v*' | sort -V | tail -1)
-          if [ -z "$LATEST" ]; then
-            LATEST="v0.0.0"
+          if [ -n "$VERSION_INPUT" ]; then
+            if ! [[ "$VERSION_INPUT" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+              echo "::error::version must look like 2.0.0"
+              exit 1
+            fi
+            NEW_TAG="v$VERSION_INPUT"
+          else
+            LATEST=$(git tag -l 'v*' | sort -V | tail -1)
+            VERSION="${LATEST:-v0.0.0}"
+            VERSION="${VERSION#v}"
+            MAJOR=$(echo "$VERSION" | cut -d. -f1)
+            MINOR=$(echo "$VERSION" | cut -d. -f2)
+            PATCH=$(echo "$VERSION" | cut -d. -f3)
+            case "$BUMP_TYPE" in
+              major) MAJOR=$((MAJOR + 1)); MINOR=0; PATCH=0 ;;
+              minor) MINOR=$((MINOR + 1)); PATCH=0 ;;
+              patch) PATCH=$((PATCH + 1)) ;;
+            esac
+            NEW_TAG="v${MAJOR}.${MINOR}.${PATCH}"
           fi
-          echo "Latest tag: $LATEST"
-
-          VERSION="${LATEST#v}"
-          MAJOR=$(echo "$VERSION" | cut -d. -f1)
-          MINOR=$(echo "$VERSION" | cut -d. -f2)
-          PATCH=$(echo "$VERSION" | cut -d. -f3)
-
-          case "${{ inputs.bump_type }}" in
-            major) MAJOR=$((MAJOR + 1)); MINOR=0; PATCH=0 ;;
-            minor) MINOR=$((MINOR + 1)); PATCH=0 ;;
-            patch) PATCH=$((PATCH + 1)) ;;
-          esac
-
-          NEW_TAG="v${MAJOR}.${MINOR}.${PATCH}"
           echo "New tag: $NEW_TAG"
           echo "new_tag=$NEW_TAG" >> "$GITHUB_OUTPUT"
 
       - name: Create and push tag
+        env:
+          NEW_TAG: ${{ steps.version.outputs.new_tag }}
         run: |
-          NEW_TAG="${{ steps.version.outputs.new_tag }}"
           if git ls-remote --exit-code --tags origin "refs/tags/$NEW_TAG" >/dev/null 2>&1; then
             echo "::error::Tag $NEW_TAG already exists on origin. Investigate before retrying."
             exit 1
@@ -69,14 +76,19 @@ jobs:
       - name: Create GitHub Release
         env:
           GH_TOKEN: ${{ github.token }}
+          NEW_TAG: ${{ steps.version.outputs.new_tag }}
         run: |
-          NEW_TAG="${{ steps.version.outputs.new_tag }}"
-          # --generate-notes builds a changelog from commits/PRs since the previous tag.
-          # No --latest=false here (unlike a multi-branch setup) -- with one branch,
-          # every release IS the latest, so it should show as such in the repo sidebar.
-          gh release create "$NEW_TAG" --title "$NEW_TAG" --generate-notes
+          # The lines under "## <tag>" in CHANGELOG.md, up to the next "## " heading.
+          awk -v tag="$NEW_TAG" '/^## /{p = ($2 == tag); next} p' CHANGELOG.md > notes.md 2>/dev/null || true
+          if [ -s notes.md ]; then
+            gh release create "$NEW_TAG" --title "$NEW_TAG" --notes-file notes.md
+          else
+            gh release create "$NEW_TAG" --title "$NEW_TAG" --generate-notes
+          fi
 
       - name: Summary
+        env:
+          NEW_TAG: ${{ steps.version.outputs.new_tag }}
         run: |
-          echo "### Released \`${{ steps.version.outputs.new_tag }}\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "### Released \`$NEW_TAG\`" >> "$GITHUB_STEP_SUMMARY"
           echo "From commit \`${{ github.sha }}\`." >> "$GITHUB_STEP_SUMMARY"

@@ -34,15 +34,7 @@ data "aws_caller_identity" "current" {}
 data "aws_region" "current" {}
 
 locals {
-  # SES authorizes a send against whichever identity actually covers the sender address
-  # at the time of sending — if the address's domain is *also* separately verified as
-  # its own DOMAIN identity (as commonly happens in an AWS account already used for
-  # other email sending), SES checks against the domain identity's ARN instead of the
-  # individual email-address identity's ARN, regardless of which one Terraform created
-  # here. Granting both covers it either way, without needing to know in advance which
-  # one SES will actually enforce.
-  ses_sender_domain       = split("@", var.ses_sender_email)[1]
-  ses_domain_identity_arn = "arn:aws:ses:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:identity/${local.ses_sender_domain}"
+  ses_identities_arn = "arn:aws:ses:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:identity/*"
 }
 
 data "aws_iam_policy_document" "lambda_permissions" {
@@ -58,10 +50,9 @@ data "aws_iam_policy_document" "lambda_permissions" {
     resources = [var.table_arn]
   }
 
-  # GetItem for the per-request role check (requireAdmin); Scan + PutItem for
-  # ensureFirstAdmin's bootstrap check/claim and listAdminEmails' admin-list lookup
-  # (both in lib/roles.ts). No DeleteItem/UpdateItem -- promoting/demoting an admin is
-  # deliberately never done through this Lambda (see Doc/design.md).
+  # GetItem for the role check, Scan to list admins, PutItem for the first-admin
+  # bootstrap and promote/demote (lib/roles.ts). No DeleteItem: demoting writes
+  # role "user" instead. Safeguards for role changes are in handlers/adminSetRole.ts.
   statement {
     sid       = "RolesTableAccess"
     effect    = "Allow"
@@ -114,25 +105,16 @@ data "aws_iam_policy_document" "lambda_permissions" {
   }
 
   statement {
-    # The resource ARN alone has to be this broad, because that's what SES itself
-    # checks against once the domain is separately verified — not a choice we get to
-    # make. But nothing about that requires this role to actually be *able* to send as
-    # any other address at the domain: the ses:FromAddress condition pins real,
-    # effective capability to exactly this project's own sender address, regardless of
-    # what else the resource ARN's blast radius looks like on paper.
+    # SES checks every identity involved: the sender's address or domain, and in the
+    # sandbox each verified recipient too. So the resource covers this account's
+    # identities, and ses:FromAddress limits sending to this project's own address.
     #
-    # Both actions are granted despite the app only ever using the SESv2 SDK client
-    # (App-code/backend/src/lib/ses.ts) — confirmed via a live AccessDenied error that
-    # a Content.Simple SendEmail call through SESv2Client is still authorized under the
-    # classic `ses:SendEmail` action, not `sesv2:SendEmail`. Don't remove `ses:SendEmail`
-    # again on the assumption it's dead just because the SDK client is v2.
-    sid     = "SesSend"
-    effect  = "Allow"
-    actions = ["ses:SendEmail", "sesv2:SendEmail"]
-    resources = [
-      var.ses_identity_arn,
-      local.ses_domain_identity_arn,
-    ]
+    # ses:SendEmail is needed even though the code uses the SESv2 client; SES
+    # authorizes that call under the classic action. Don't remove it.
+    sid       = "SesSend"
+    effect    = "Allow"
+    actions   = ["ses:SendEmail", "sesv2:SendEmail"]
+    resources = [local.ses_identities_arn]
 
     condition {
       test     = "StringEquals"
@@ -158,7 +140,7 @@ resource "aws_lambda_function" "api" {
   function_name    = var.function_name
   role             = aws_iam_role.lambda_exec.arn
   handler          = "index.handler"
-  runtime          = "nodejs20.x"
+  runtime          = "nodejs24.x" # keep in step with target in App-code/backend/build.mjs
   filename         = data.archive_file.lambda.output_path
   source_code_hash = data.archive_file.lambda.output_base64sha256
   timeout          = 10
@@ -230,6 +212,7 @@ locals {
     "POST /admin/users"             = { protected = true }
     "GET /admin/users"              = { protected = true }
     "POST /admin/users/remove"      = { protected = true }
+    "POST /admin/users/role"        = { protected = true }
     "GET /auth-config"              = { protected = false }
     "GET /branding"                 = { protected = false }
     "GET /admin/settings"           = { protected = true }

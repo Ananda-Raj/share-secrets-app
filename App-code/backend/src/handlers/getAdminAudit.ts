@@ -32,7 +32,11 @@ export async function getAdminAudit(event: ApiEvent) {
           claimedAt: r.claimedAt ?? null,
           confirmedAt: r.confirmedAt ?? null,
           revokedAt: r.revokedAt ?? null,
+          failedAt: r.failedAt ?? null,
         })),
+        // For the ready-to-copy Reset commands on the Activity tab.
+        auditTableName: config.auditTableName,
+        region: process.env.AWS_REGION ?? "",
       },
       config.frontendOrigin
     );

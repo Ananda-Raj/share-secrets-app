@@ -7,6 +7,7 @@ import {
   createLocalUser,
   listAdminUsers,
   removeAdminUser,
+  setUserRole,
   getAdminSettings,
   updateAdminSettings,
   sendSummaryPreview,
@@ -16,14 +17,14 @@ import {
   type AuthSettings,
   type CognitoUserSummary,
 } from "../api.js";
-import { isLoggedIn, login } from "../auth.js";
+import { isLoggedIn, login, logout } from "../auth.js";
 import { renderNav, wireNav } from "../components.js";
 import { escapeHtml } from "../html.js";
 import { loadBrandingTab, loadSharingRulesTab } from "./adminSettings.js";
 
-type Tab = "activity" | "auth" | "users" | "branding" | "rules";
+type Tab = "activity" | "auth" | "users" | "rules" | "customize";
 
-/** Admin-only: activity, auth settings, users, branding and sharing rules, as tabs. Backend 403s
+/** Admin-only: activity, auth settings, users, sharing rules and customize, as tabs. Backend 403s
  * non-admins regardless of whether renderNav happened to show them the link. */
 export async function renderAdminPage(root: HTMLElement): Promise<void> {
   if (!isLoggedIn()) {
@@ -33,14 +34,14 @@ export async function renderAdminPage(root: HTMLElement): Promise<void> {
 
   root.innerHTML = `
     ${renderNav("admin")}
-    <div class="card">
+    <div class="card card-wide">
       <h1>Admin</h1>
       <div class="tabs">
         <button type="button" class="tab active" data-tab="activity">Activity</button>
         <button type="button" class="tab" data-tab="auth">Auth settings</button>
         <button type="button" class="tab" data-tab="users">Users</button>
-        <button type="button" class="tab" data-tab="branding">Branding</button>
         <button type="button" class="tab" data-tab="rules">Sharing rules</button>
+        <button type="button" class="tab" data-tab="customize">Customize</button>
       </div>
       <div id="tab-content"><p class="muted">Loading...</p></div>
     </div>
@@ -56,8 +57,8 @@ export async function renderAdminPage(root: HTMLElement): Promise<void> {
     if (tab === "activity") await loadActivity(tabContent);
     if (tab === "auth") await loadAuthSettings(tabContent);
     if (tab === "users") await loadUsers(tabContent);
-    if (tab === "branding") await loadBrandingTab(tabContent);
     if (tab === "rules") await loadSharingRulesTab(tabContent);
+    if (tab === "customize") await loadBrandingTab(tabContent);
   }
 
   tabButtons.forEach((b) => b.addEventListener("click", () => showTab(b.dataset.tab as Tab)));
@@ -67,21 +68,27 @@ export async function renderAdminPage(root: HTMLElement): Promise<void> {
 async function loadActivity(container: HTMLElement): Promise<void> {
   container.innerHTML = `
     <p class="muted">Everyone's sharing activity and the top senders, for a date range.</p>
-    <div class="report-row">
-      <label class="checkbox"><input id="monthly-summary" type="checkbox" disabled /> Email admins a monthly summary</label>
-      <button type="button" id="summary-preview" class="link-button">Send me a preview</button>
-    </div>
-    <p class="muted small">Sent on the 1st of each month for the month before: counts by status and the top senders.</p>
-    <p id="summary-status" class="hint" role="status"></p>
     <div class="filter-row">
       <label for="from">From</label>
       <input id="from" type="date" />
       <label for="to">To</label>
       <input id="to" type="date" />
       <button id="refresh" class="link-button">Refresh</button>
-      <button id="export-csv" class="link-button" disabled>Download CSV</button>
+      <span class="filter-row-end">
+        <button id="export-csv" class="link-button" disabled>Download CSV</button>
+        <button id="reset" type="button" class="link-button link-danger" aria-expanded="false" aria-controls="reset-panel">Reset</button>
+      </span>
     </div>
+    <div id="reset-panel" class="panel hidden"></div>
     <div id="activity-content"><p class="muted">Loading...</p></div>
+
+    <h2>Monthly summary</h2>
+    <div class="report-row">
+      <label class="checkbox"><input id="monthly-summary" type="checkbox" disabled /> Email admins a monthly summary</label>
+      <button type="button" id="summary-preview" class="link-button">Send me a preview</button>
+    </div>
+    <p class="muted small">Sent on the 1st of each month for the month before: counts by status and the top senders.</p>
+    <p id="summary-status" class="hint" role="status"></p>
   `;
 
   const activityContent = container.querySelector<HTMLElement>("#activity-content")!;
@@ -89,8 +96,10 @@ async function loadActivity(container: HTMLElement): Promise<void> {
   const toInput = container.querySelector<HTMLInputElement>("#to")!;
   const exportButton = container.querySelector<HTMLButtonElement>("#export-csv")!;
   let lastItems: AdminAuditItem[] = [];
+  const table = { name: "AUDIT_TABLE_NAME", region: "" };
 
   exportButton.addEventListener("click", () => downloadCsv(lastItems));
+  wireReset(container, table, fromInput, toInput);
 
   async function load(): Promise<void> {
     exportButton.disabled = true;
@@ -101,6 +110,8 @@ async function loadActivity(container: HTMLElement): Promise<void> {
       const [audit, stats] = await Promise.all([getAdminAudit(fromEpoch, toEpoch), getAdminStats(fromEpoch, toEpoch)]);
       activityContent.innerHTML = renderActivityContent(audit.items, stats.topSenders);
       lastItems = audit.items;
+      if (audit.auditTableName) table.name = audit.auditTableName;
+      if (audit.region) table.region = audit.region;
       exportButton.disabled = lastItems.length === 0;
     } catch (err) {
       activityContent.innerHTML =
@@ -113,6 +124,149 @@ async function loadActivity(container: HTMLElement): Promise<void> {
   container.querySelector<HTMLButtonElement>("#refresh")!.addEventListener("click", load);
   void wireMonthlySummary(container);
   await load();
+}
+
+const SAFE_EMAIL_RE = /^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$/;
+
+/** Reset shows AWS CLI commands instead of deleting: the app itself can't delete history. */
+function wireReset(
+  container: HTMLElement,
+  table: { name: string; region: string },
+  activityFrom: HTMLInputElement,
+  activityTo: HTMLInputElement
+): void {
+  const button = container.querySelector<HTMLButtonElement>("#reset")!;
+  const panel = container.querySelector<HTMLElement>("#reset-panel")!;
+  panel.innerHTML = `
+    <div class="panel-head">
+      <p class="panel-title">Reset history</p>
+      <button type="button" id="r-close" class="link-button">Close</button>
+    </div>
+    <p class="muted small">
+      There's no delete button here on purpose. History is the app's audit trail: the app can add
+      to it but never delete from it, so even a stolen admin login can't erase what was shared.
+      Rows delete themselves after a year. To remove them sooner, someone with AWS access runs
+      these commands.
+    </p>
+    <div class="reset-fields">
+      <label>From<input id="r-from" type="date" /></label>
+      <label>To<input id="r-to" type="date" /></label>
+      <label>Sender<input id="r-sender" type="email" placeholder="Anyone" /></label>
+    </div>
+    <p id="r-scope" class="hint" role="status"></p>
+    <div id="r-commands">
+      <p class="step-title">1. Check what will be deleted</p>
+      <div class="command"><pre id="r-check" class="code-hint"></pre><button type="button" class="link-button" data-copy="r-check">Copy</button></div>
+      <p class="step-title">2. Delete it</p>
+      <div class="command"><pre id="r-delete" class="code-hint"></pre><button type="button" class="link-button" data-copy="r-delete">Copy</button></div>
+      <p class="muted small">
+        Replace YOUR_PROFILE with your AWS CLI profile. For one day, pick the same date twice.
+        Only delete activity older than 7 days, so no link that's still open loses its record.
+        The table's point-in-time backups keep deleted rows for up to 35 days.
+      </p>
+    </div>
+  `;
+
+  const $ = <T extends HTMLElement>(sel: string) => panel.querySelector<T>(sel)!;
+  const from = $<HTMLInputElement>("#r-from");
+  const to = $<HTMLInputElement>("#r-to");
+  const sender = $<HTMLInputElement>("#r-sender");
+  const scope = $<HTMLElement>("#r-scope");
+  const commands = $<HTMLElement>("#r-commands");
+
+  const update = () => {
+    const fromEpoch = dateInputToEpoch(from.value, "start");
+    const toEpoch = dateInputToEpoch(to.value, "end");
+    const who = sender.value.trim();
+    const problem =
+      who && !SAFE_EMAIL_RE.test(who)
+        ? "Enter the sender's full email address."
+        : fromEpoch !== undefined && toEpoch !== undefined && fromEpoch > toEpoch
+          ? "The From date is after the To date."
+          : "";
+    commands.classList.toggle("hidden", problem !== "");
+    scope.className = problem ? "error" : "hint";
+    if (problem) {
+      scope.textContent = problem;
+      return;
+    }
+    const range =
+      fromEpoch === undefined && toEpoch === undefined
+        ? "all dates"
+        : `${from.value || "the start"} to ${to.value || "today"}`;
+    scope.textContent = `Matches shares sent ${who ? `by ${who}` : "by anyone"}, ${range}.${!who && fromEpoch === undefined && toEpoch === undefined ? " That's all history." : ""}`;
+    const cmd = resetCommands(table.name, table.region, fromEpoch, toEpoch, who);
+    $("#r-check").textContent = cmd.check;
+    $("#r-delete").textContent = cmd.remove;
+  };
+  [from, to, sender].forEach((input) => input.addEventListener("input", update));
+
+  const setOpen = (open: boolean) => {
+    panel.classList.toggle("hidden", !open);
+    button.setAttribute("aria-expanded", String(open));
+  };
+  button.addEventListener("click", () => {
+    const open = panel.classList.contains("hidden");
+    if (open) {
+      from.value = activityFrom.value;
+      to.value = activityTo.value;
+      update();
+    }
+    setOpen(open);
+  });
+  $<HTMLButtonElement>("#r-close").addEventListener("click", () => setOpen(false));
+
+  panel.querySelectorAll<HTMLButtonElement>("[data-copy]").forEach((copy) =>
+    copy.addEventListener("click", async () => {
+      const text = $(`#${copy.dataset.copy}`).textContent ?? "";
+      try {
+        await navigator.clipboard.writeText(text);
+        copy.textContent = "Copied";
+      } catch {
+        copy.textContent = "Select and copy";
+      }
+      setTimeout(() => (copy.textContent = "Copy"), 1500);
+    })
+  );
+}
+
+/** Scan for matching rows, then delete each by its key. The values are typed into the page,
+ * so the sender is checked against SAFE_EMAIL_RE first: no quotes can reach the shell. */
+function resetCommands(rawTable: string, rawRegion: string, fromEpoch?: number, toEpoch?: number, sender?: string) {
+  // These get pasted into a shell, so only allow characters a table name or region can have.
+  const table = /^[A-Za-z0-9_.-]{3,255}$/.test(rawTable) ? rawTable : "AUDIT_TABLE_NAME";
+  const region = /^[a-z0-9-]{1,30}$/.test(rawRegion) ? rawRegion : "";
+  const target = `--table-name ${table}${region ? ` --region ${region}` : ""} --profile YOUR_PROFILE`;
+  const filters: string[] = [];
+  const values: Record<string, { N?: string; S?: string }> = {};
+  if (fromEpoch !== undefined || toEpoch !== undefined) {
+    filters.push("createdAt BETWEEN :from AND :to");
+    values[":from"] = { N: String(fromEpoch ?? 0) };
+    values[":to"] = { N: String(toEpoch ?? Math.floor(Date.now() / 1000)) };
+  }
+  if (sender) {
+    filters.push("senderEmail = :sender");
+    values[":sender"] = { S: sender };
+  }
+  const scan = [
+    `aws dynamodb scan ${target}`,
+    ...(filters.length
+      ? [`  --filter-expression "${filters.join(" AND ")}"`, `  --expression-attribute-values '${JSON.stringify(values)}'`]
+      : []),
+  ];
+  const check = [
+    ...scan,
+    `  --projection-expression "createdAt, senderEmail, recipientEmail"`,
+    `  --query 'Items[].[createdAt.N, senderEmail.S, recipientEmail.S]' --output table`,
+  ].join(" \\\n");
+  const remove = [
+    [...scan, `  --projection-expression secretId --query 'Items[].secretId.S' --output text |`].join(" \\\n"),
+    `tr '\\t' '\\n' | while read -r id; do`,
+    `  [ -n "$id" ] && aws dynamodb delete-item ${target} \\`,
+    `    --key "{\\"secretId\\":{\\"S\\":\\"$id\\"}}" && echo "deleted $id"`,
+    `done`,
+  ].join("\n");
+  return { check, remove };
 }
 
 async function wireMonthlySummary(container: HTMLElement): Promise<void> {
@@ -230,6 +384,7 @@ function typeLabel(item: AdminAuditItem): string {
 }
 
 function statusText(item: AdminAuditItem): string {
+  if (item.failedAt) return "Not sent";
   if (item.revokedAt) return "Revoked";
   if (item.confirmedAt) return "Viewed";
   if (item.claimedAt) return "Opened";
@@ -239,7 +394,8 @@ function statusText(item: AdminAuditItem): string {
 
 function statusBadge(item: AdminAuditItem): string {
   const text = statusText(item);
-  const cls = text === "Viewed" ? "badge-done" : text === "Opened" ? "badge-pending" : "badge-waiting";
+  const cls =
+    text === "Viewed" ? "badge-done" : text === "Opened" ? "badge-pending" : text === "Not sent" ? "badge-failed" : "badge-waiting";
   return `<span class="badge ${cls}">${text}</span>`;
 }
 
@@ -326,14 +482,7 @@ async function loadAuthSettings(container: HTMLElement): Promise<void> {
     <button id="save-idp" class="primary">Save identity provider</button>
     <p id="idp-error" class="error" role="alert"></p>
     <p id="idp-success" class="hint hidden"></p>
-
-    <h2>Add a local account</h2>
-    <p class="muted small">For someone without access to the identity provider above — e.g. a short-term contractor. Shows a one-time temporary password; nothing here stores it.</p>
-    <label for="local-user-email">Email</label>
-    <input id="local-user-email" type="email" placeholder="contractor@example.com" />
-    <button id="create-local-user" class="primary">Create account</button>
-    <p id="local-user-error" class="error" role="alert"></p>
-    <div id="local-user-result"></div>
+    <p class="muted small">To add someone without SSO, use <strong>Users → Local accounts</strong>.</p>
   `;
 
   const signupError = container.querySelector<HTMLElement>("#signup-error")!;
@@ -373,45 +522,18 @@ async function loadAuthSettings(container: HTMLElement): Promise<void> {
     }
   });
 
-  const localUserError = container.querySelector<HTMLElement>("#local-user-error")!;
-  const localUserResult = container.querySelector<HTMLElement>("#local-user-result")!;
-  container.querySelector<HTMLButtonElement>("#create-local-user")!.addEventListener("click", async () => {
-    localUserError.textContent = "";
-    localUserResult.innerHTML = "";
-    const emailInput = container.querySelector<HTMLInputElement>("#local-user-email")!;
-    const email = emailInput.value.trim();
-    if (!email) {
-      localUserError.textContent = "Enter an email address.";
-      return;
-    }
-    try {
-      const { temporaryPassword } = await createLocalUser(email);
-      localUserResult.innerHTML = `
-        <p class="hint">Account created for <strong>${escapeHtml(email)}</strong>. Temporary password
-        (shown once — relay it out of band, it can't be retrieved again):</p>
-        <input type="text" id="temp-password-out" readonly value="${escapeHtml(temporaryPassword)}" />
-      `;
-      // CSP has no 'unsafe-inline' for scripts, so this is wired up here rather than
-      // via an onclick="" attribute (which the browser would silently refuse to run).
-      localUserResult.querySelector<HTMLInputElement>("#temp-password-out")!.addEventListener("click", (e) => {
-        (e.currentTarget as HTMLInputElement).select();
-      });
-      emailInput.value = "";
-    } catch (err) {
-      localUserError.textContent =
-        err instanceof ApiError && err.status === 409
-          ? "An account with that email already exists."
-          : "Could not create this account.";
-    }
-  });
 }
 
-async function loadUsers(container: HTMLElement): Promise<void> {
+/** created carries a new account's one-time password through the list refresh. */
+async function loadUsers(
+  container: HTMLElement,
+  notice = "",
+  created?: { email: string; temporaryPassword: string }
+): Promise<void> {
   let users: CognitoUserSummary[];
   let yourEmail: string;
-  let rolesTableName: string;
   try {
-    ({ users, yourEmail, rolesTableName } = await listAdminUsers());
+    ({ users, yourEmail } = await listAdminUsers());
   } catch (err) {
     container.innerHTML =
       err instanceof ApiError && err.status === 403
@@ -424,44 +546,112 @@ async function loadUsers(container: HTMLElement): Promise<void> {
   const local = users.filter((u) => !u.isFederated);
 
   container.innerHTML = `
-    <p class="hint">
-      To make someone admin (or take it back), run one of these — there's no button for
-      it on purpose, so changing who's an admin always needs real AWS access, not just
-      another admin's say-so:
+    <p class="muted">
+      Admins can make other people admins, or take it back. For safety, that needs a sign-in in
+      the last 10 minutes, you can't change your own role, and every admin gets an email about
+      each change.
     </p>
-    <pre class="code-hint"># Promote
-aws dynamodb put-item --table-name ${escapeHtml(rolesTableName)} \\
-  --item '{"email": {"S": "someone@example.com"}, "role": {"S": "admin"}}'
-
-# Demote back to a normal user
-aws dynamodb delete-item --table-name ${escapeHtml(rolesTableName)} \\
-  --key '{"email": {"S": "someone@example.com"}}'</pre>
+    <p id="users-status" class="hint" role="status"></p>
 
     <h2>SSO users</h2>
     ${sso.length === 0 ? `<p class="muted small">None yet.</p>` : userTableHtml(sso, yourEmail)}
 
     <h2>Local accounts</h2>
+    <p class="muted small">For someone without SSO, e.g. a short-term contractor. You see a temporary password once; it isn't stored.</p>
+    <div class="inline-form">
+      <input id="local-user-email" type="email" placeholder="contractor@example.com" aria-label="Email for a new local account" />
+      <button id="create-local-user" class="primary">Create account</button>
+    </div>
+    <p id="local-user-error" class="error" role="alert"></p>
+    ${
+      created
+        ? `<div class="created-account">
+            <p class="hint">Account created for <strong>${escapeHtml(created.email)}</strong>. Temporary password
+            (shown once; send it to them another way, it can't be shown again):</p>
+            <input type="text" id="temp-password-out" readonly value="${escapeHtml(created.temporaryPassword)}" />
+          </div>`
+        : ""
+    }
     ${local.length === 0 ? `<p class="muted small">None yet.</p>` : userTableHtml(local, yourEmail)}
   `;
 
+  const status = container.querySelector<HTMLElement>("#users-status")!;
+  status.textContent = notice;
+
+  // Wired here, not with onclick="": the CSP blocks inline scripts.
+  container.querySelector<HTMLInputElement>("#temp-password-out")?.addEventListener("click", (e) => {
+    (e.currentTarget as HTMLInputElement).select();
+  });
+
+  const localUserError = container.querySelector<HTMLElement>("#local-user-error")!;
+  container.querySelector<HTMLButtonElement>("#create-local-user")!.addEventListener("click", async (e) => {
+    const button = e.currentTarget as HTMLButtonElement;
+    localUserError.textContent = "";
+    const email = container.querySelector<HTMLInputElement>("#local-user-email")!.value.trim();
+    if (!email) {
+      localUserError.textContent = "Enter an email address.";
+      return;
+    }
+    button.disabled = true;
+    try {
+      const { temporaryPassword } = await createLocalUser(email);
+      await loadUsers(container, "", { email, temporaryPassword });
+    } catch (err) {
+      button.disabled = false;
+      localUserError.textContent =
+        err instanceof ApiError && err.status === 409 ? "An account with that email already exists." : "Could not create this account.";
+    }
+  });
+  const showError = (err: unknown, fallback: string) => {
+    status.className = "error";
+    if (err instanceof ApiError && err.code === "reauth_required") {
+      status.innerHTML = `For safety, changing admins needs a fresh sign-in.
+        <button type="button" id="reauth" class="link-button">Sign in again</button>, then come back to Admin → Users.`;
+      status.querySelector("#reauth")!.addEventListener("click", () => logout());
+      return;
+    }
+    const known: Record<string, string> = {
+      cannot_change_self: "You can't change your own role.",
+      cannot_remove_self: "You can't remove your own account.",
+      last_admin: "You can't remove the last admin.",
+      not_found: "That account no longer exists. Refresh the list.",
+    };
+    status.textContent = (err instanceof ApiError && err.code && known[err.code]) || fallback;
+  };
+
+  container.querySelectorAll<HTMLButtonElement>("[data-role-username]").forEach((button) => {
+    button.addEventListener("click", async () => {
+      const email = button.dataset.email!;
+      const makeAdmin = button.dataset.role === "admin";
+      const question = makeAdmin
+        ? `Make ${email} an admin?\n\nThey'll be able to change settings, see everyone's activity and manage users. Every admin will be emailed.`
+        : `Take admin away from ${email}?\n\nEvery admin will be emailed.`;
+      if (!confirm(question)) return;
+      button.disabled = true;
+      try {
+        await setUserRole(button.dataset.roleUsername!, makeAdmin ? "admin" : "user");
+        await loadUsers(container, `${email} ${makeAdmin ? "is now an admin" : "is no longer an admin"}. Every admin was emailed.`);
+      } catch (err) {
+        button.disabled = false;
+        showError(err, "Could not change this role. Please try again.");
+      }
+    });
+  });
+
   container.querySelectorAll<HTMLButtonElement>("[data-remove-username]").forEach((button) => {
     button.addEventListener("click", async () => {
-      const username = button.dataset.removeUsername!;
-      const email = button.dataset.removeEmail!;
-      if (!confirm(`Remove ${email}? This can't be undone.\n\nFor an SSO user, this only clears their Cognito record — it doesn't revoke access at the identity provider, and they'll just get a new one on next login.`)) {
+      const email = button.dataset.email!;
+      const adminNote = button.dataset.admin === "true" ? "\n\nThey're an admin, so this also takes that away, and every admin is emailed." : "";
+      if (!confirm(`Remove ${email}? This can't be undone.\n\nFor an SSO user, this only clears their Cognito record — it doesn't revoke access at the identity provider, and they'll just get a new one on next login.${adminNote}`)) {
         return;
       }
       button.disabled = true;
       try {
-        await removeAdminUser(username, email);
-        await loadUsers(container);
+        await removeAdminUser(button.dataset.removeUsername!);
+        await loadUsers(container, `${email} was removed.`);
       } catch (err) {
         button.disabled = false;
-        alert(
-          err instanceof ApiError && err.code === "cannot_remove_self"
-            ? "You can't remove your own account."
-            : "Could not remove this account. Please try again."
-        );
+        showError(err, "Could not remove this account. Please try again.");
       }
     });
   });
@@ -470,22 +660,28 @@ aws dynamodb delete-item --table-name ${escapeHtml(rolesTableName)} \\
 function userTableHtml(users: CognitoUserSummary[], yourEmail: string): string {
   return `
     <table class="data-table">
-      <thead><tr><th>Email</th><th>Status</th><th></th></tr></thead>
+      <thead><tr><th>Email</th><th>Role</th><th>Status</th><th></th></tr></thead>
       <tbody>
         ${users
-          .map(
-            (u) => `
+          .map((u) => {
+            const email = escapeHtml(u.email);
+            const username = escapeHtml(u.username);
+            const isYou = u.email.toLowerCase() === yourEmail.toLowerCase();
+            return `
           <tr>
-            <td>${escapeHtml(u.email)}${u.isAdmin ? ` <span class="muted small">(Admin)</span>` : ""}</td>
+            <td>${email}</td>
+            <td>${u.isAdmin ? `<span class="badge badge-pending">Admin</span>` : `<span class="muted small">User</span>`}</td>
             <td>${userStatusBadge(u)}</td>
             <td>${
-              u.email === yourEmail
+              isYou
                 ? `<span class="muted small">(you)</span>`
-                : `<button type="button" class="link-button" data-remove-username="${escapeHtml(u.username)}" data-remove-email="${escapeHtml(u.email)}">Remove</button>`
+                : `<span class="row-actions">
+                    <button type="button" class="link-button" data-role-username="${username}" data-email="${email}" data-role="${u.isAdmin ? "user" : "admin"}">${u.isAdmin ? "Remove admin" : "Make admin"}</button>
+                    <button type="button" class="link-button link-danger" data-remove-username="${username}" data-email="${email}" data-admin="${u.isAdmin}">Remove</button>
+                  </span>`
             }</td>
-          </tr>
-        `
-          )
+          </tr>`;
+          })
           .join("")}
       </tbody>
     </table>
