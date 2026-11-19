@@ -1,0 +1,35 @@
+name: Guard Infra
+
+# Infra/ is local-only, manually-applied Terraform (see Doc/deployment.md) — nothing in
+# GitHub Actions ever runs terraform plan/apply, so a PR that changes Infra/ would sit
+# unapplied forever and just drift from whatever's actually running. This fails any PR
+# that touches the folder at all.
+#
+# IMPORTANT: a failing check alone does not block a merge. To make this a hard block,
+# add a branch protection rule on `main`: Settings → Branches → Add rule →
+# require status checks to pass → select "Guard Infra / block-infra-changes".
+on:
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  block-infra-changes:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Fail if this PR touches Infra/
+        run: |
+          git fetch origin "${{ github.base_ref }}" --depth=1
+          changed=$(git diff --name-only "origin/${{ github.base_ref }}...HEAD")
+          echo "Changed files:"
+          echo "$changed"
+          if echo "$changed" | grep -q '^Infra/'; then
+            echo "::error::This PR modifies files under Infra/. Terraform is local-only for this project — apply changes from a local clone instead of merging them here."
+            exit 1
+          fi

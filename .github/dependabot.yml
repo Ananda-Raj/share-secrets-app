@@ -1,0 +1,15 @@
+# Weekly update PRs. Terraform is left out: guard-infra.yml fails PRs that touch Infra/.
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: /App-code/backend
+    schedule:
+      interval: weekly
+  - package-ecosystem: npm
+    directory: /App-code/frontend
+    schedule:
+      interval: weekly
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly

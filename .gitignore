@@ -1,0 +1,27 @@
+# dependencies
+node_modules/
+
+# build output
+dist/
+App-code/backend/dist/
+App-code/frontend/dist/
+
+# terraform
+Infra/**/.terraform/
+*.tfstate
+*.tfstate.*
+*.tfplan
+Infra/**/terraform.tfvars
+!Infra/**/terraform.tfvars.example
+# archive_file's generated Lambda zip
+Infra/modules/*/build/
+
+# env / secrets
+.env
+.env.*
+!.env.example
+
+# misc
+.DS_Store
+*.log
+coverage/

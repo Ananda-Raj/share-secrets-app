@@ -1,0 +1,759 @@
+/* ==========================================================================
+   Design tokens
+   ========================================================================== */
+
+:root {
+  --bg: #f4f5f7;
+  --card-bg: #ffffff;
+  --text: #1b1e24;
+  --muted: #6b7280;
+  --border: #d9dce1;
+  --primary: #2563eb;
+  --primary-hover: #1d4ed8;
+  --primary-text: #ffffff;
+  --error: #b91c1c;
+  --focus-ring: rgba(37, 99, 235, 0.35);
+  --radius: 12px;
+  --radius-sm: 8px;
+  --shadow: 0 1px 2px rgba(16, 24, 40, 0.04), 0 8px 24px rgba(16, 24, 40, 0.06);
+  --font-sans-fallback: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0f1115;
+    --card-bg: #181b21;
+    --text: #e8eaed;
+    --muted: #9aa1ac;
+    --border: #2b2f37;
+    --primary: #3b82f6;
+    --primary-hover: #60a5fa;
+    --primary-text: #ffffff;
+    --error: #f87171;
+    --focus-ring: rgba(59, 130, 246, 0.4);
+    --shadow: 0 1px 2px rgba(0, 0, 0, 0.3), 0 8px 24px rgba(0, 0, 0, 0.35);
+  }
+}
+
+* {
+  box-sizing: border-box;
+}
+
+/* Ambient brand background -- 3 blurred accent-color blobs, fixed behind #app, outside
+   it in the DOM so route changes never touch or re-trigger them. transform/opacity only
+   (no backdrop-filter) so it stays GPU-cheap; disabled under reduced-motion. Sits at
+   z-index -1, below #app's default static stacking, above body's own --bg color. */
+.bg-blobs {
+  position: fixed;
+  inset: 0;
+  overflow: hidden;
+  z-index: -1;
+  pointer-events: none;
+}
+
+.blob {
+  position: absolute;
+  width: 46vmax;
+  height: 46vmax;
+  border-radius: 50%;
+  filter: blur(70px);
+  opacity: 0.3;
+  will-change: transform;
+}
+
+.blob-1 {
+  top: -14%;
+  left: -14%;
+  background: radial-gradient(circle, var(--primary), transparent 70%);
+  animation: blobDrift1 32s ease-in-out infinite;
+}
+
+.blob-2 {
+  top: 26%;
+  right: -18%;
+  background: radial-gradient(circle, #14b8a6, transparent 70%);
+  animation: blobDrift2 40s ease-in-out infinite;
+}
+
+.blob-3 {
+  bottom: -16%;
+  left: 18%;
+  background: radial-gradient(circle, #8b5cf6, transparent 70%);
+  animation: blobDrift3 36s ease-in-out infinite;
+}
+
+@media (prefers-color-scheme: dark) {
+  .blob {
+    opacity: 0.4;
+  }
+}
+
+@keyframes blobDrift1 {
+  0%, 100% { transform: translate(0, 0) scale(1); }
+  50% { transform: translate(6%, 8%) scale(1.08); }
+}
+
+@keyframes blobDrift2 {
+  0%, 100% { transform: translate(0, 0) scale(1); }
+  50% { transform: translate(-8%, 6%) scale(1.05); }
+}
+
+@keyframes blobDrift3 {
+  0%, 100% { transform: translate(0, 0) scale(1); }
+  50% { transform: translate(5%, -7%) scale(1.1); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .blob {
+    animation: none;
+  }
+}
+
+/* Toggled via classList, never inline styles — CSP's style-src 'self' (no
+   'unsafe-inline') blocks the style="" attribute. (CSSOM writes such as
+   style.setProperty are allowed; branding.ts uses them for the accent color.)
+   !important so this always wins over an element's own display rule (e.g.
+   .file-picker-clear sets display: flex) regardless of source order. */
+.hidden {
+  display: none !important;
+}
+
+/* ==========================================================================
+   Layout
+   ========================================================================== */
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  /* Anchored near the top rather than vertically centered: every page (a short login
+     form, a long history table) then starts at the same fixed distance from the top, so
+     the nav bar doesn't jump around and require a mouse move when switching tabs. */
+  padding: 76px 24px 24px;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-sans-fallback);
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* One width for every page -- login/create/history/admin all use plain .card. */
+.card {
+  width: 100%;
+  max-width: 720px;
+  background: var(--card-bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  padding: 30px;
+}
+
+/* History only -- wide enough for its table's columns to sit comfortably with no
+   horizontal scrolling, while .nav above it (shared by every authenticated page) stays
+   at the standard 720px so the nav's position never shifts between pages. */
+.card-wide {
+  max-width: 900px;
+}
+
+.card + .card {
+  margin-top: 20px;
+}
+
+.nav {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  width: 100%;
+  max-width: 720px;
+  margin: 0 0 18px;
+  padding: 0 4px;
+}
+
+/* Logo + wordmark. Inside .nav it's just the leading flex item; standalone
+   (unlock/result pages, no nav) it gets its own margin below. */
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-right: 4px;
+  text-decoration: none;
+}
+
+.brand:hover .brand-name {
+  color: var(--primary);
+}
+
+.brand-name {
+  font-family: var(--font-sans-fallback);
+  font-weight: 700;
+  font-size: 1.05rem;
+  letter-spacing: -0.01em;
+  color: var(--text);
+}
+
+/* Admin-set logos can be wide wordmarks. */
+.brand-logo {
+  height: 28px;
+  width: auto;
+  max-width: 140px;
+  object-fit: contain;
+}
+
+/* Standalone use (pages with no .nav): own row above the card. */
+.brand-standalone {
+  width: 100%;
+  max-width: 720px;
+  margin: 0 0 18px;
+  padding: 0 4px;
+}
+
+/* ==========================================================================
+   Typography
+   ========================================================================== */
+
+h1 {
+  font-size: 1.4rem;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  margin: 0 0 6px;
+}
+
+h2 {
+  font-size: 1.05rem;
+  font-weight: 600;
+  margin: 26px 0 10px;
+}
+
+.muted {
+  color: var(--muted);
+  font-size: 0.92rem;
+  margin: 0 0 18px;
+}
+
+.muted.small {
+  font-size: 0.8rem;
+  margin-top: 6px;
+}
+
+/* ==========================================================================
+   Forms
+   ========================================================================== */
+
+label {
+  display: block;
+  font-size: 0.85rem;
+  font-weight: 600;
+  margin: 16px 0 6px;
+}
+
+textarea,
+input[type="text"],
+input[type="password"],
+input[type="email"],
+input[type="date"],
+select {
+  width: 100%;
+  padding: 10px 12px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--text);
+  font-size: 0.95rem;
+  font-family: inherit;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+textarea:hover,
+input:not([type="checkbox"]):not(:disabled):hover,
+select:hover {
+  border-color: color-mix(in srgb, var(--border) 50%, var(--muted));
+}
+
+textarea:focus-visible,
+input:not([type="checkbox"]):focus-visible,
+select:focus-visible {
+  outline: none;
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px var(--focus-ring);
+}
+
+textarea {
+  resize: vertical;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+/* Visually hidden but still focusable/tabbable -- the native file input itself. Its
+   associated <label class="file-picker-btn"> is the only visible trigger, so the control
+   looks the same across browsers instead of each one's own "No file chosen" chrome. */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.file-picker {
+  display: flex;
+  align-items: stretch;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg);
+  overflow: hidden;
+}
+
+.file-picker-btn {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  margin: 0;
+  padding: 10px 14px;
+  background: var(--border);
+  color: var(--text);
+  font-size: 0.85rem;
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.file-picker-btn:hover {
+  background: color-mix(in srgb, var(--border) 70%, var(--muted));
+}
+
+.sr-only:focus-visible + .file-picker-btn {
+  outline: none;
+  box-shadow: inset 0 0 0 2px var(--primary);
+}
+
+.file-picker-name {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  padding: 10px 12px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.9rem;
+  color: var(--muted);
+}
+
+.file-picker-name.has-file {
+  color: var(--text);
+}
+
+.file-picker-clear {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  border: none;
+  border-left: 1px solid var(--border);
+  background: transparent;
+  color: var(--muted);
+  font-size: 0.9rem;
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.file-picker-clear:hover {
+  background: var(--border);
+  color: var(--error);
+}
+
+.file-picker-clear:focus-visible {
+  outline: none;
+  box-shadow: inset 0 0 0 2px var(--focus-ring);
+}
+
+.checkbox {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 400;
+  margin-top: 14px;
+}
+
+.checkbox input {
+  width: auto;
+  accent-color: var(--primary);
+}
+
+/* ==========================================================================
+   Buttons & links
+   ========================================================================== */
+
+.primary {
+  display: block;
+  width: 100%;
+  margin-top: 18px;
+  padding: 12px;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: var(--primary);
+  color: var(--primary-text);
+  font-size: 0.95rem;
+  font-weight: 600;
+  text-align: center;
+  text-decoration: none;
+  cursor: pointer;
+  transition: background 0.15s ease, transform 0.05s ease;
+}
+
+.primary:hover {
+  background: var(--primary-hover);
+}
+
+.primary:active {
+  transform: translateY(1px);
+}
+
+.primary:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px var(--focus-ring);
+}
+
+.primary:disabled {
+  opacity: 0.6;
+  cursor: default;
+  transform: none;
+}
+
+.link-back {
+  display: inline-block;
+  margin-top: 18px;
+  color: var(--primary);
+  font-size: 0.88rem;
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.link-back:hover {
+  text-decoration: underline;
+}
+
+/* Same look as .link-back, but usable on a <button> — resets native button chrome. */
+.link-button {
+  display: inline-block;
+  margin-top: 14px;
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--primary);
+  font-size: 0.88rem;
+  font-weight: 600;
+  font-family: inherit;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.link-button:hover {
+  text-decoration: underline;
+}
+
+.link-button:disabled {
+  color: var(--muted);
+  cursor: default;
+  text-decoration: none;
+}
+
+a:focus-visible,
+button:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px var(--focus-ring);
+  border-radius: 4px;
+}
+
+/* ==========================================================================
+   Tabs (auth mode picker, admin page sections)
+   ========================================================================== */
+
+.tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 18px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 4px;
+}
+
+.tab {
+  flex: 1;
+  padding: 8px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--muted);
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.tab:hover:not(.active) {
+  background: var(--bg);
+  color: var(--text);
+}
+
+.tab.active {
+  background: var(--primary);
+  color: var(--primary-text);
+}
+
+/* ==========================================================================
+   Feedback: errors, hints, badges
+   ========================================================================== */
+
+.error {
+  color: var(--error);
+  font-size: 0.85rem;
+  margin-top: 12px;
+  min-height: 1em;
+}
+
+.hint {
+  color: var(--muted);
+  font-size: 0.85rem;
+  margin-top: 10px;
+}
+
+.code-hint {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 12px 14px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.78rem;
+  white-space: pre-wrap;
+  word-break: break-word;
+  margin: 4px 0 18px;
+}
+
+.link-box {
+  display: flex;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+.link-box input {
+  flex: 1;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.82rem;
+}
+
+.link-box button {
+  width: auto;
+  margin-top: 0;
+  padding: 10px 16px;
+}
+
+.badge {
+  display: inline-block;
+  padding: 3px 10px;
+  border-radius: 999px;
+  font-size: 0.76rem;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+}
+
+.badge-waiting {
+  background: rgba(107, 114, 128, 0.15);
+  color: var(--muted);
+}
+
+.badge-pending {
+  background: rgba(37, 99, 235, 0.15);
+  color: var(--primary);
+}
+
+.badge-done {
+  background: rgba(21, 128, 61, 0.15);
+  color: #15803d;
+}
+
+@media (prefers-color-scheme: dark) {
+  .badge-done {
+    color: #4ade80;
+  }
+}
+
+/* ==========================================================================
+   Nav (authenticated pages)
+   ========================================================================== */
+
+.nav-link {
+  color: var(--muted);
+  font-size: 0.9rem;
+  font-weight: 600;
+  text-decoration: none;
+  border: none;
+  background: none;
+  cursor: pointer;
+  padding: 2px 0;
+  font-family: inherit;
+  transition: color 0.15s ease;
+}
+
+.nav-link.active {
+  color: var(--primary);
+}
+
+.nav-link:hover {
+  color: var(--text);
+}
+
+.nav-link.active:hover {
+  color: var(--primary);
+}
+
+.nav-logout {
+  margin-left: auto;
+}
+
+/* ==========================================================================
+   Data tables (history, admin)
+   ========================================================================== */
+
+.filter-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 8px;
+}
+
+.filter-row label {
+  margin: 0;
+  font-size: 0.82rem;
+}
+
+.filter-row input[type="date"] {
+  width: auto;
+  padding: 7px 10px;
+}
+
+/* Wraps a wide table (history/audit) inside the fixed-width .card -- the table itself
+   stays comfortably sized (see .data-table-wide) and scrolls sideways here instead of
+   squeezing every column thin to fit. */
+.table-scroll {
+  overflow-x: auto;
+}
+
+.data-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.9rem;
+  margin-top: 8px;
+}
+
+/* History/admin-activity tables: enough columns now that letting them shrink to the
+   card's width would cramp every cell. min-width forces .table-scroll's horizontal
+   scrollbar instead, so Sent/Type/Status/Expires stay readable. */
+.data-table-wide {
+  min-width: 780px;
+}
+
+.data-table th,
+.data-table td {
+  text-align: left;
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--border);
+}
+
+.data-table tbody tr {
+  transition: background 0.1s ease;
+}
+
+.data-table tbody tr:hover {
+  background: var(--bg);
+}
+
+.data-table th {
+  color: var(--muted);
+  font-weight: 600;
+  font-size: 0.76rem;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+/* The last column is always an action (a button) or a number in every table this class
+   is used for -- centering it consistently looks better than the default left-align. */
+.data-table th:last-child,
+.data-table td:last-child {
+  text-align: center;
+}
+
+/* ==========================================================================
+   Branding: footer and admin controls
+   ========================================================================== */
+
+.site-footer {
+  margin-top: auto;
+  padding-top: 32px;
+  width: 100%;
+  max-width: 720px;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 4px 16px;
+  font-size: 0.85rem;
+  color: var(--muted);
+  text-align: center;
+}
+
+.site-footer a {
+  color: var(--primary);
+}
+
+.logo-row,
+.color-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 6px;
+}
+
+.logo-preview {
+  height: 40px;
+  width: auto;
+  max-width: 160px;
+  object-fit: contain;
+  padding: 4px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--card-bg);
+}
+
+.color-row input[type="color"] {
+  width: 48px;
+  height: 36px;
+  padding: 2px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--card-bg);
+  cursor: pointer;
+}
+
+.send-failures {
+  margin: 4px 0 0;
+  padding-left: 20px;
+  color: var(--error);
+  font-size: 0.85rem;
+}
+
+.report-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0 20px;
+}

@@ -1,0 +1,24 @@
+{
+  "name": "secretshare-backend",
+  "version": "1.0.0",
+  "private": true,
+  "license": "Apache-2.0",
+  "type": "module",
+  "scripts": {
+    "build": "node build.mjs",
+    "test": "node --import tsx --test test/*.test.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@aws-sdk/client-cognito-identity-provider": "^3.632.0",
+    "@aws-sdk/client-dynamodb": "^3.632.0",
+    "@aws-sdk/client-sesv2": "^3.632.0",
+    "@aws-sdk/lib-dynamodb": "^3.632.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.14.0",
+    "esbuild": "^0.25.0",
+    "tsx": "^4.16.0",
+    "typescript": "^5.5.0"
+  }
+}

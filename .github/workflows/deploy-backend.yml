@@ -1,0 +1,57 @@
+name: Deploy Backend
+
+# Manual only. Pushes backend code to an already-existing Lambda function via plain AWS
+# CLI — no Terraform anywhere in this workflow. Terraform is a local-only tool for this
+# project (see Doc/deployment.md): it provisions/updates infrastructure, but never runs in
+# CI, and this workflow never touches its state. The function name comes from the
+# BACKEND_FUNCTION_NAME repo variable, copied once from `terraform output
+# backend_function_name` after infra is applied — update that variable if the function
+# is ever recreated under a different name.
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: "Environment to deploy (matches the repo variables' target)"
+        required: true
+        default: prod
+
+permissions:
+  id-token: write # required to assume the AWS role via OIDC — no access keys stored anywhere
+  contents: read
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.environment }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Build backend Lambda
+        working-directory: App-code/backend
+        run: |
+          npm ci
+          npm test
+          npm run build
+
+      - name: Zip the Lambda bundle
+        working-directory: App-code/backend/dist
+        run: zip -r ../function.zip .
+
+      - name: Configure AWS credentials (OIDC — no long-lived keys)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+
+      - name: Update Lambda code
+        run: |
+          aws lambda update-function-code \
+            --function-name "${{ vars.BACKEND_FUNCTION_NAME }}" \
+            --zip-file fileb://App-code/backend/function.zip
+
+      - name: Wait for the update to finish
+        run: aws lambda wait function-updated-v2 --function-name "${{ vars.BACKEND_FUNCTION_NAME }}"

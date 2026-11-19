@@ -1,0 +1,55 @@
+name: PR Checks
+
+# Runs on every PR into main: typecheck/test/build for both apps. Entirely separate from
+# deploy-backend.yml/deploy-frontend.yml (which stay manual workflow_dispatch triggers)
+# and from guard-infra.yml — this workflow never deploys anything and never touches AWS,
+# so it can't make a routine deploy any slower or add any deploy-time checks. It only
+# gates what gets merged.
+on:
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  backend:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: App-code/backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: App-code/backend/package-lock.json
+      - run: npm ci
+      - name: Typecheck
+        run: npm run typecheck
+      - name: Test
+        run: npm test
+      - name: Build
+        run: npm run build
+
+  frontend:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: App-code/frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: App-code/frontend/package-lock.json
+      - run: npm ci
+      - name: Typecheck + build
+        # No real API/Cognito to build against in CI — a placeholder VITE_API_BASE_URL
+        # is enough for `tsc --noEmit` + `vite build` to succeed; nothing here makes a
+        # network call using it.
+        run: npm run build
+        env:
+          VITE_API_BASE_URL: https://placeholder.example.com

@@ -1,0 +1,29 @@
+# Copy to terraform.tfvars (gitignored) and fill in.
+# The state bucket is passed to `terraform init` -- see Doc/deployment.md.
+
+aws_region         = "us-east-1"
+aws_profile        = "" # leave blank to use the default credential chain
+environment        = "dev"
+project_name       = "secure-secrets"
+ses_sender_email   = "secrets@yourdomain.com"
+budget_alert_emails     = ["you@yourdomain.com"]
+monitoring_alert_emails = ["you@yourdomain.com"]
+github_repository  = "your-org/your-repo"
+
+# false if this AWS account already has a GitHub Actions OIDC provider from another
+# project (one per account per URL — see modules/github-oidc).
+create_github_oidc_provider = true
+
+# Leave both blank to use the default CloudFront domain.
+frontend_domain_name = ""
+acm_certificate_arn  = ""
+
+# Any standard OIDC provider (Entra ID, Okta, Google Workspace, Auth0, Keycloak, ...).
+# Leave blank if allow_self_signup = true and you don't need SSO yet.
+oidc_issuer_url    = ""
+oidc_client_id     = ""
+oidc_client_secret = ""
+oidc_idp_name      = "CompanySSO"
+
+# Lets anyone self-register with email+password — see Doc/design.md.
+allow_self_signup = false

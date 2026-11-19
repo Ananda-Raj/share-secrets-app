@@ -1,0 +1,82 @@
+name: Release
+
+# Manual only. Tags the current main HEAD and creates a GitHub Release with
+# auto-generated notes since the last tag -- lets you (or anyone deploying this
+# project) pin to a known-good version instead of always tracking main directly.
+#
+# Deliberately simpler than a multi-branch (develop/test/main) versioning pipeline: this
+# project has one branch and two independent manual deploy workflows, not a promotion
+# pipeline, so there's nothing for per-branch tagging to model here. Just: pick a bump
+# type, get a tag + release.
+on:
+  workflow_dispatch:
+    inputs:
+      bump_type:
+        description: "Which part of the version to bump"
+        required: true
+        type: choice
+        options: [patch, minor, major]
+        default: patch
+
+permissions:
+  contents: write
+
+jobs:
+  tag-and-release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # need full history to see all existing tags
+          fetch-tags: true
+
+      - name: Compute next version
+        id: version
+        run: |
+          LATEST=$(git tag -l 'v*' | sort -V | tail -1)
+          if [ -z "$LATEST" ]; then
+            LATEST="v0.0.0"
+          fi
+          echo "Latest tag: $LATEST"
+
+          VERSION="${LATEST#v}"
+          MAJOR=$(echo "$VERSION" | cut -d. -f1)
+          MINOR=$(echo "$VERSION" | cut -d. -f2)
+          PATCH=$(echo "$VERSION" | cut -d. -f3)
+
+          case "${{ inputs.bump_type }}" in
+            major) MAJOR=$((MAJOR + 1)); MINOR=0; PATCH=0 ;;
+            minor) MINOR=$((MINOR + 1)); PATCH=0 ;;
+            patch) PATCH=$((PATCH + 1)) ;;
+          esac
+
+          NEW_TAG="v${MAJOR}.${MINOR}.${PATCH}"
+          echo "New tag: $NEW_TAG"
+          echo "new_tag=$NEW_TAG" >> "$GITHUB_OUTPUT"
+
+      - name: Create and push tag
+        run: |
+          NEW_TAG="${{ steps.version.outputs.new_tag }}"
+          if git ls-remote --exit-code --tags origin "refs/tags/$NEW_TAG" >/dev/null 2>&1; then
+            echo "::error::Tag $NEW_TAG already exists on origin. Investigate before retrying."
+            exit 1
+          fi
+          git config user.name "github-actions"
+          git config user.email "github-actions@github.com"
+          git tag "$NEW_TAG"
+          git push origin "$NEW_TAG"
+
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          NEW_TAG="${{ steps.version.outputs.new_tag }}"
+          # --generate-notes builds a changelog from commits/PRs since the previous tag.
+          # No --latest=false here (unlike a multi-branch setup) -- with one branch,
+          # every release IS the latest, so it should show as such in the repo sidebar.
+          gh release create "$NEW_TAG" --title "$NEW_TAG" --generate-notes
+
+      - name: Summary
+        run: |
+          echo "### Released \`${{ steps.version.outputs.new_tag }}\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "From commit \`${{ github.sha }}\`." >> "$GITHUB_STEP_SUMMARY"
